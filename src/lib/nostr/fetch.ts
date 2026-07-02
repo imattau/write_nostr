@@ -25,24 +25,27 @@ function getPool(): SimplePool {
 // Articles (kind 30023)
 // ---------------------------------------------------------------------------
 
-/** Cache key for the global articles feed. */
-const ARTICLES_ALL_KEY = 'articles-all';
+export async function fetchArticles(
+	relayUrls: string[],
+	options?: { limit?: number; authors?: string[]; skipCache?: boolean }
+): Promise<NostrEvent[]> {
+	const { limit = 50, authors, skipCache = false } = options ?? {};
+	if (authors && !authors.length) return [];
+	const groupKey = authors ? `articles-authors-${[...authors].sort().join(',')}` : 'articles-all';
 
-export async function fetchArticles(relayUrls: string[], limit = 50): Promise<NostrEvent[]> {
-	// 1. Try cache
-	const cached = await getEvents(ARTICLES_ALL_KEY, TTL.articles);
-	if (cached) {
-		return cached.sort((a, b) => b.created_at - a.created_at).slice(0, limit);
+	if (!skipCache) {
+		const cached = await getEvents(groupKey, TTL.articles);
+		if (cached) {
+			return cached.sort((a, b) => b.created_at - a.created_at).slice(0, limit);
+		}
 	}
 
-	// 2. Fetch from relay
-	const filter: Filter = { kinds: [30023], limit };
+	const filter: Filter = { kinds: [30023], ...(authors ? { authors } : {}), limit };
 	const p = getPool();
 	const events = await p.querySync(relayUrls, filter);
 	const sorted = events.sort((a, b) => b.created_at - a.created_at);
 
-	// 3. Persist to cache
-	await putEvents(sorted, ARTICLES_ALL_KEY);
+	await putEvents(sorted, groupKey);
 
 	return sorted;
 }
@@ -50,19 +53,23 @@ export async function fetchArticles(relayUrls: string[], limit = 50): Promise<No
 /**
  * Fetch older articles (for "Load More" pagination).
  * Bypasses the cache — fetches directly from relays using `until` cursor.
- * Results are appended to the `articles-all` cache group so subsequent
- * page loads don't need to re-fetch them.
+ * Results are appended to the same cache group so subsequent page loads
+ * don't need to re-fetch them.
  */
 export async function fetchOlderArticles(
 	relayUrls: string[],
 	until: number,
-	limit = 20
+	options?: { limit?: number; authors?: string[] }
 ): Promise<NostrEvent[]> {
-	const filter: Filter = { kinds: [30023], until, limit };
+	const { limit = 20, authors } = options ?? {};
+	if (authors && !authors.length) return [];
+	const groupKey = authors ? `articles-authors-${[...authors].sort().join(',')}` : 'articles-all';
+
+	const filter: Filter = { kinds: [30023], ...(authors ? { authors } : {}), until, limit };
 	const p = getPool();
 	const events = await p.querySync(relayUrls, filter);
 	const sorted = events.sort((a, b) => b.created_at - a.created_at);
-	if (sorted.length > 0) await putEvents(sorted, ARTICLES_ALL_KEY);
+	if (sorted.length > 0) await putEvents(sorted, groupKey);
 	return sorted;
 }
 
@@ -98,13 +105,19 @@ export async function fetchArticleByIdentifier(
  * Fetch the follow list (kind 3) for a pubkey.
  * Returns the list of followed pubkeys.
  */
-export async function fetchFollowList(pubkey: string, relayUrls: string[]): Promise<string[]> {
+export async function fetchFollowList(
+	pubkey: string,
+	relayUrls: string[],
+	skipCache = false
+): Promise<string[]> {
 	const groupKey = `followlist-${pubkey}`;
 
 	// 1. Try cache
-	const cached = await getEvents(groupKey, TTL.followList);
-	if (cached && cached.length > 0) {
-		return cached[0].tags.filter(([t]) => t === 'p').map(([, pk]) => pk).filter(Boolean);
+	if (!skipCache) {
+		const cached = await getEvents(groupKey, TTL.followList);
+		if (cached && cached.length > 0) {
+			return cached[0].tags.filter(([t]) => t === 'p').map(([, pk]) => pk).filter(Boolean);
+		}
 	}
 
 	// 2. Fetch from relay
@@ -117,62 +130,6 @@ export async function fetchFollowList(pubkey: string, relayUrls: string[]): Prom
 	await putEvents([events[0]], groupKey);
 
 	return events[0].tags.filter(([t]) => t === 'p').map(([, pk]) => pk).filter(Boolean);
-}
-
-// ---------------------------------------------------------------------------
-// Articles by authors (kind 30023)
-// ---------------------------------------------------------------------------
-
-/**
- * Fetch long-form articles authored by a specific set of pubkeys.
- */
-export async function fetchArticlesByAuthors(
-	authors: string[],
-	relayUrls: string[],
-	limit = 100
-): Promise<NostrEvent[]> {
-	if (!authors.length) return [];
-
-	// Use a stable key: sorted authors fingerprint
-	const groupKey = `articles-authors-${[...authors].sort().join(',')}`;
-
-	// 1. Try cache
-	const cached = await getEvents(groupKey, TTL.articles);
-	if (cached) {
-		return cached.sort((a, b) => b.created_at - a.created_at).slice(0, limit);
-	}
-
-	// 2. Fetch from relay
-	const filter: Filter = { kinds: [30023], authors, limit };
-	const p = getPool();
-	const events = await p.querySync(relayUrls, filter);
-	const sorted = events.sort((a, b) => b.created_at - a.created_at);
-
-	// 3. Persist to cache
-	await putEvents(sorted, groupKey);
-
-	return sorted;
-}
-
-/**
- * Fetch older articles by authors (for "Load More" pagination).
- * Bypasses the cache — fetches directly from relays using `until` cursor.
- * Results are appended to the same authors group key as the initial fetch.
- */
-export async function fetchOlderArticlesByAuthors(
-	authors: string[],
-	relayUrls: string[],
-	until: number,
-	limit = 20
-): Promise<NostrEvent[]> {
-	if (!authors.length) return [];
-	const groupKey = `articles-authors-${[...authors].sort().join(',')}`;
-	const filter: Filter = { kinds: [30023], authors, until, limit };
-	const p = getPool();
-	const events = await p.querySync(relayUrls, filter);
-	const sorted = events.sort((a, b) => b.created_at - a.created_at);
-	if (sorted.length > 0) await putEvents(sorted, groupKey);
-	return sorted;
 }
 
 // ---------------------------------------------------------------------------

@@ -33,6 +33,12 @@
 	let contentTextarea = $state<HTMLTextAreaElement | null>(null);
 
 	let autoSaveTimer: ReturnType<typeof setTimeout>;
+	let justSaved = $state(false);
+
+	function flashSaved() {
+		justSaved = true;
+		setTimeout(() => { justSaved = false; }, 1500);
+	}
 
 	function autoSave() {
 		clearTimeout(autoSaveTimer);
@@ -61,6 +67,7 @@
 			updatedAt: Date.now(),
 			publishedAt
 		});
+		flashSaved();
 	}
 
 	function addTag() {
@@ -163,7 +170,7 @@
 		<button onclick={() => (showMeta = !showMeta)}>
 			Meta
 		</button>
-		<button onclick={saveDraft}>Save Draft</button>
+		<button class="saved" class:just-saved={justSaved} onclick={saveDraft}>{justSaved ? 'Saved ✓' : 'Save Draft'}</button>
 		<button class="primary" onclick={handlePublish} disabled={!title.trim() || !content.trim()}>
 			Publish
 		</button>
@@ -267,6 +274,11 @@
 	.toolbar button {
 		font-size: 0.8125rem;
 		padding: var(--space-xs) var(--space-sm);
+	}
+	.just-saved {
+		background: var(--c-accent);
+		color: #fff;
+		transition: background 0.2s;
 	}
 	.editor-body {
 		flex: 1;

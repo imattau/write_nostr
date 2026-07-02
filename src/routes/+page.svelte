@@ -8,11 +8,10 @@
 	import {
 		fetchArticles,
 		fetchFollowList,
-		fetchArticlesByAuthors,
 		fetchInteractionScores,
-		fetchOlderArticles,
-		fetchOlderArticlesByAuthors
+		fetchOlderArticles
 	} from '$lib/nostr/fetch';
+	import { getAllEventsByKind, TTL } from '$lib/db';
 	import ArticleCard from '$lib/components/ArticleCard.svelte';
 
 	type FeedMode = 'all' | 'circle' | 'top';
@@ -24,11 +23,50 @@
 	let loadingMore = $state(false);
 	let scoringLoading = $state(false);
 	let error = $state('');
+	let tagFilter = $state<string | null>(null);
+	let cachedArticles = $state<NostrEvent[]>([]);
 	/** Pubkeys followed by the current user — kept so loadMore can reuse them */
 	let circleFollowing = $state<string[]>([]);
 
 	/** Articles with blocked authors filtered out — updates reactively when blocks change */
 	let visibleArticles = $derived(articles.filter((a) => !$blocks.has(a.pubkey)));
+
+	/** Sweep the cache for all kind:30023 events when a tag filter is active */
+	$effect(() => {
+		if (tagFilter) {
+			getAllEventsByKind(30023, TTL.articles).then((events) => {
+				cachedArticles = events;
+			});
+		} else {
+			cachedArticles = [];
+		}
+	});
+
+	/** Merge in-memory + cached articles, deduplicate, then filter by active tag */
+	let filteredArticles = $derived.by(() => {
+		if (!tagFilter) return visibleArticles;
+
+		const blocked = $blocks;
+		const seen = new Set<string>();
+		const merged: NostrEvent[] = [];
+
+		// In-memory articles come first (they're already block-filtered)
+		for (const a of visibleArticles) {
+			if (!seen.has(a.id)) {
+				seen.add(a.id);
+				merged.push(a);
+			}
+		}
+		// Cache sweep articles fill in the rest, with block filtering
+		for (const a of cachedArticles) {
+			if (!seen.has(a.id) && !blocked.has(a.pubkey)) {
+				seen.add(a.id);
+				merged.push(a);
+			}
+		}
+
+		return merged.filter((a) => a.tags.some(([k, v]) => k === 't' && v === tagFilter));
+	});
 
 	/** Oldest timestamp among loaded articles — used as `until` cursor for pagination */
 	let oldestTimestamp = $derived(
@@ -39,8 +77,9 @@
 		await load('all');
 	});
 
-	async function load(nextMode: FeedMode) {
+	async function load(nextMode: FeedMode, force = false) {
 		mode = nextMode;
+		tagFilter = null;
 		loading = true;
 		error = '';
 		scores = new Map();
@@ -50,7 +89,7 @@
 
 		try {
 			if (nextMode === 'all') {
-				articles = await fetchArticles(relayList);
+				articles = await fetchArticles(relayList, force ? { skipCache: true } : undefined);
 			} else if (nextMode === 'circle') {
 				const pk = get(pubkey);
 				if (!pk) {
@@ -58,17 +97,17 @@
 					loading = false;
 					return;
 				}
-				const following = await fetchFollowList(pk, relayList);
+				const following = await fetchFollowList(pk, relayList, force);
 				if (!following.length) {
 					error = 'No follows found on your connected relays.';
 					loading = false;
 					return;
 				}
 				circleFollowing = following;
-				articles = await fetchArticlesByAuthors(following, relayList);
+				articles = await fetchArticles(relayList, { authors: following, skipCache: force });
 			} else if (nextMode === 'top') {
 				// Fetch a wider pool then score them
-				const pool = await fetchArticles(relayList, 100);
+				const pool = await fetchArticles(relayList, { limit: 100, skipCache: force });
 				articles = pool;
 				loading = false;
 
@@ -97,7 +136,7 @@
 		try {
 			let older: NostrEvent[];
 			if (mode === 'circle') {
-				older = await fetchOlderArticlesByAuthors(circleFollowing, relayList, oldestTimestamp - 1);
+				older = await fetchOlderArticles(relayList, oldestTimestamp - 1, { authors: circleFollowing });
 			} else {
 				older = await fetchOlderArticles(relayList, oldestTimestamp - 1);
 			}
@@ -155,9 +194,15 @@
 					Top Articles
 				</button>
 			</div>
+			{#if tagFilter}
+				<div class="tag-filter-chip">
+					<span class="tag-filter-label">#{tagFilter}</span>
+					<button class="tag-filter-clear" onclick={() => tagFilter = null} aria-label="Clear tag filter">&times;</button>
+				</div>
+			{/if}
 			<button
 				class="refresh-btn"
-				onclick={() => load(mode)}
+				onclick={() => load(mode, true)}
 				disabled={loading || scoringLoading}
 				title="Refresh"
 				aria-label="Refresh feed"
@@ -193,15 +238,20 @@
 				<span class="pulse">●</span> Calculating interaction scores…
 			</p>
 		{/if}
-		<div class="article-list">
-			{#each visibleArticles as article (article.id)}
-				<ArticleCard
-					event={article}
-					relays={$relays}
-					score={mode === 'top' ? (scores.get(article.id) ?? 0) : undefined}
-				/>
-			{/each}
-		</div>
+		{#if tagFilter && filteredArticles.length === 0}
+			<p class="empty">No articles tagged <strong>#{tagFilter}</strong>.</p>
+		{:else}
+			<div class="article-list">
+				{#each filteredArticles as article (article.id)}
+					<ArticleCard
+						event={article}
+						relays={$relays}
+						score={mode === 'top' ? (scores.get(article.id) ?? 0) : undefined}
+						onTagClick={(tag) => tagFilter = tagFilter === tag ? null : tag}
+					/>
+				{/each}
+			</div>
+		{/if}
 		{#if mode !== 'top'}
 			<div class="load-more-wrap">
 				<button
@@ -279,6 +329,42 @@
 	/* Dividers between tabs */
 	.tab + .tab {
 		border-left: 1px solid var(--c-border);
+	}
+
+	/* Tag filter chip */
+	.tag-filter-chip {
+		display: inline-flex;
+		align-items: center;
+		gap: 2px;
+		padding: 2px 8px;
+		border-radius: var(--radius);
+		background: var(--c-accent);
+		color: #fff;
+		font-size: 0.8125rem;
+		font-weight: 500;
+		white-space: nowrap;
+	}
+	.tag-filter-label {
+		padding: 0 2px;
+	}
+	.tag-filter-clear {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 18px;
+		height: 18px;
+		padding: 0;
+		border: none;
+		background: transparent;
+		color: inherit;
+		font-size: 1.1rem;
+		line-height: 1;
+		cursor: pointer;
+		border-radius: 50%;
+		transition: background 0.15s;
+	}
+	.tag-filter-clear:hover {
+		background: rgba(255,255,255,0.2);
 	}
 
 	/* Refresh button */

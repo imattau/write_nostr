@@ -161,6 +161,23 @@ export async function getEvent(
 	return record.event;
 }
 
+/**
+ * Retrieve all cached events of a given kind that are not stale.
+ * Useful for sweeping the cache across group keys (e.g. all articles).
+ */
+export async function getAllEventsByKind(
+	kind: number,
+	ttl: number
+): Promise<NostrEvent[]> {
+	if (typeof window === 'undefined') return [];
+	const db = await getDB();
+	const records = await db.getAllFromIndex('events', 'byKind', kind);
+	if (!records.length) return [];
+	return records
+		.filter((r) => !isStale(r.cachedAt, ttl))
+		.map((r) => r.event);
+}
+
 // ---------------------------------------------------------------------------
 // Profiles API
 // ---------------------------------------------------------------------------

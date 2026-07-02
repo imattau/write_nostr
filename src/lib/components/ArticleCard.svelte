@@ -15,7 +15,12 @@
 
 	import { relays } from '$lib/stores/relays';
 
-	let { event, relays: relaysProp, score = undefined }: { event: NostrEvent; relays: string[]; score?: number } = $props();
+	let { event, relays: relaysProp, score = undefined, onTagClick = undefined }: {
+		event: NostrEvent;
+		relays: string[];
+		score?: number;
+		onTagClick?: (tag: string) => void;
+	} = $props();
 
 	// Request profile for author whenever the event or relay list changes.
 	// Tracking $relays ensures a retry when relays become available after a
@@ -159,7 +164,14 @@
 			<span class="score" title="Interaction score: likes + boosts + zaps">⚡ {score}</span>
 		{/if}
 		{#each visibleTags as tag}
-			<span class="tag">{tag}</span>
+			<button
+				class="tag"
+				onclick={(e) => {
+					e.preventDefault();
+					e.stopPropagation();
+					onTagClick?.(tag);
+				}}
+			>{tag}</button>
 		{/each}
 		{#if hiddenTagCount > 0}
 			<span class="tag tag-overflow">+{hiddenTagCount}</span>
@@ -270,10 +282,20 @@
 		background: var(--c-bg);
 		border-radius: 4px;
 		white-space: nowrap;
+		border: none;
+		font: inherit;
+		color: inherit;
+		cursor: pointer;
+		transition: background 0.15s, color 0.15s;
+	}
+	.tag:hover {
+		background: var(--c-accent);
+		color: #fff;
 	}
 	.tag-overflow {
 		opacity: 0.5;
 		font-style: italic;
+		cursor: default;
 	}
 	.score {
 		display: inline-flex;
