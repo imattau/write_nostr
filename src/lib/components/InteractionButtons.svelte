@@ -17,26 +17,35 @@
 	let boostLoading = $state(false);
 	let boosted = $state(false);
 
+	type LnurlInfo = { callback: string; minSendable: number; maxSendable: number };
+	const lnurlCache = new Map<string, LnurlInfo | null>();
+
 	let showZapPopover = $state(false);
 	let zapAmount = $state(21);
 	let zapCustom = $state('');
 	let zapLoading = $state(false);
 	let zapError = $state('');
 	let zapSuccess = $state(false);
-	let zapChecking = $state(false);
+	let zapInfo = $state<LnurlInfo | null | undefined>(undefined);
 	let zapTooltip = $state('');
 	let zapTooltipTimer: ReturnType<typeof setTimeout> | null = $state(null);
-	let lnurlInfo: {
-		callback: string;
-		minSendable: number;
-		maxSendable: number;
-	} | null = $state(null);
 
 	let isAuthed = $derived($auth !== null);
 	let nwcOk = $derived($nwc.connected);
 
 	$effect(() => {
 		if (event?.id && $auth && !likeFetched) checkExistingLike();
+	});
+
+	$effect(() => {
+		$profileCache;
+		if (!event?.pubkey || zapInfo !== undefined) return;
+		if (lnurlCache.has(event.pubkey)) {
+			const cached = lnurlCache.get(event.pubkey);
+			zapInfo = cached ?? null;
+			return;
+		}
+		resolveLnurlInfo();
 	});
 
 	async function checkExistingLike() {
@@ -92,24 +101,14 @@
 		zapTooltipTimer = setTimeout(() => { zapTooltip = ''; }, 3000);
 	}
 
-	async function openZapPopover() {
-		zapError = '';
-		zapSuccess = false;
-		if (!nwcOk) {
-			showTooltip('Set up NWC in Settings to zap');
+	async function resolveLnurlInfo() {
+		const profile = $profileCache.get(event.pubkey);
+		if (!profile || (!profile.lud06 && !profile.lud16)) {
+			lnurlCache.set(event.pubkey, null);
+			zapInfo = null;
 			return;
 		}
-		if (lnurlInfo) {
-			showZapPopover = true;
-			return;
-		}
-		zapChecking = true;
 		try {
-			const profile = $profileCache.get(event.pubkey);
-			if (!profile || (!profile.lud06 && !profile.lud16)) {
-				showTooltip('Author does not accept zaps');
-				return;
-			}
 			let lnurlUrl: string;
 			if (profile.lud16) {
 				const [name, domain] = profile.lud16.split('@');
@@ -123,24 +122,35 @@
 			const res = await fetch(lnurlUrl);
 			const body = await res.json();
 			if (!body.allowsNostr || !body.nostrPubkey) {
-				showTooltip('Author does not accept zaps');
+				lnurlCache.set(event.pubkey, null);
+				zapInfo = null;
 				return;
 			}
-			lnurlInfo = {
+			const info: LnurlInfo = {
 				callback: body.callback,
 				minSendable: body.minSendable || 1000,
 				maxSendable: body.maxSendable || 100000000
 			};
-			showZapPopover = true;
+			lnurlCache.set(event.pubkey, info);
+			zapInfo = info;
 		} catch {
-			showTooltip('Failed to fetch zap info');
-		} finally {
-			zapChecking = false;
+			lnurlCache.set(event.pubkey, null);
+			zapInfo = null;
 		}
 	}
 
+	function openZapPopover() {
+		zapError = '';
+		zapSuccess = false;
+		if (!nwcOk) {
+			showTooltip('Set up NWC in Settings to zap');
+			return;
+		}
+		if (zapInfo) showZapPopover = true;
+	}
+
 	async function executeZap() {
-		if (!lnurlInfo || !$auth || zapLoading) return;
+		if (!zapInfo || !$auth || zapLoading) return;
 		zapLoading = true;
 		zapError = '';
 		zapSuccess = false;
@@ -149,8 +159,8 @@
 			const relayList = get(relays);
 			const sats = zapCustom ? parseInt(zapCustom) : zapAmount;
 			const millisats = sats * 1000;
-			if (millisats < lnurlInfo.minSendable || millisats > lnurlInfo.maxSendable) {
-				zapError = `Amount must be between ${lnurlInfo.minSendable / 1000} and ${lnurlInfo.maxSendable / 1000} sats`;
+			if (millisats < zapInfo.minSendable || millisats > zapInfo.maxSendable) {
+				zapError = `Amount must be between ${zapInfo.minSendable / 1000} and ${zapInfo.maxSendable / 1000} sats`;
 				return;
 			}
 			const zapRequest = nip57.makeZapRequest({
@@ -160,7 +170,7 @@
 			}) as unknown as NostrEvent;
 			zapRequest.pubkey = signer.pubkey;
 			const signedZap = await signer.sign(zapRequest);
-			const callbackUrl = new URL(lnurlInfo.callback);
+			const callbackUrl = new URL(zapInfo.callback);
 			callbackUrl.searchParams.set('amount', String(millisats));
 			callbackUrl.searchParams.set('nostr', JSON.stringify(signedZap));
 			const cbRes = await fetch(callbackUrl.toString());
@@ -230,10 +240,11 @@
 
 	<button
 		class="icon-btn zap-btn"
-		class:loading={zapChecking}
+		class:loading={zapInfo === undefined}
+		class:unavailable={zapInfo === null}
 		onclick={openZapPopover}
-		disabled={!isAuthed || zapChecking}
-		title="Zap"
+		disabled={!isAuthed || !zapInfo}
+		title={zapInfo === null ? 'Author does not accept zaps' : 'Zap'}
 	>
 		<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
 			<path d="M7.5 1L2 9h4.5l-1 6L13 7H8.5L12 1H7.5z"/>
@@ -329,6 +340,9 @@
 	}
 	.zap-btn {
 		color: #eab308;
+	}
+	.zap-btn.unavailable {
+		opacity: 0.25;
 	}
 	.zap-tooltip {
 		position: absolute;
