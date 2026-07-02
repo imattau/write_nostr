@@ -286,4 +286,34 @@
 		font-weight: 600;
 		white-space: nowrap;
 	}
+
+	@media (max-width: 640px) {
+		.card {
+			padding: var(--space-md);
+		}
+		.title {
+			font-size: 1rem;
+		}
+		.summary {
+			-webkit-line-clamp: 3;
+			line-clamp: 3;
+		}
+		.meta {
+			flex-wrap: wrap;
+			gap: var(--space-xs);
+		}
+		.author {
+			max-width: none;
+			white-space: normal;
+			word-break: break-word;
+		}
+		.tag,
+		.score {
+			font-size: 0.6875rem;
+		}
+		.social-btn {
+			width: 24px;
+			height: 24px;
+		}
+	}
 </style>

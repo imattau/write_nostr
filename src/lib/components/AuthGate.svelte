@@ -10,9 +10,7 @@
 		loading = true;
 		error = '';
 		try {
-			const signer = await auth.loginWithNsec(nsecInput.trim());
-			sessionStorage.setItem('nsec_encrypted', nsecInput.trim());
-			auth.init();
+			await auth.loginWithNsec(nsecInput.trim());
 		} catch (e) {
 			error = 'Invalid nsec key. Please check and try again.';
 		}
@@ -24,13 +22,34 @@
 		error = '';
 		try {
 			const signer = await auth.detectExtension();
-			if (signer) {
-				auth.init();
-			} else {
+			if (!signer) {
 				error = 'No NIP-07 extension detected.';
 			}
 		} catch (e) {
 			error = 'Failed to connect extension.';
+		}
+		loading = false;
+	}
+
+	async function handlePasskey() {
+		loading = true;
+		error = '';
+		try {
+			await auth.loginWithPasskey();
+		} catch (e) {
+			error = e instanceof Error ? e.message : 'Failed to unlock passkey.';
+		}
+		loading = false;
+	}
+
+	async function handleImportPasskey() {
+		loading = true;
+		error = '';
+		try {
+			await auth.importPasskeyFromNsec(nsecInput.trim());
+			nsecInput = '';
+		} catch (e) {
+			error = e instanceof Error ? e.message : 'Failed to import passkey.';
 		}
 		loading = false;
 	}
@@ -46,6 +65,15 @@
 				{loading ? 'Connecting...' : 'Connect with Browser Extension'}
 			</button>
 
+			<button onclick={handlePasskey} disabled={loading}>
+				{loading ? 'Unlocking...' : 'Login with Passkey'}
+			</button>
+
+			<p class="hint">
+				Passkey login uses a device-bound credential. If you have an `nsec`, you can import it
+				into a passkey below once, then use biometrics or device PIN next time.
+			</p>
+
 			<div class="divider"><span>or</span></div>
 
 			<form onsubmit={(e) => { e.preventDefault(); handleLogin(); }}>
@@ -59,6 +87,9 @@
 				/>
 				<button class="primary" type="submit" disabled={loading || !nsecInput.trim()}>
 					Login with nsec
+				</button>
+				<button type="button" onclick={handleImportPasskey} disabled={loading || !nsecInput.trim()}>
+					Create passkey from nsec
 				</button>
 			</form>
 
@@ -132,5 +163,30 @@
 	button {
 		width: 100%;
 		justify-content: center;
+	}
+
+	@media (max-width: 640px) {
+		.auth-gate {
+			padding: var(--space-sm);
+			align-items: flex-start;
+		}
+		.auth-card {
+			max-width: none;
+			gap: var(--space-sm);
+		}
+		h1 {
+			font-size: 1.5rem;
+		}
+		.subtitle,
+		.hint {
+			font-size: 0.8125rem;
+		}
+		.divider {
+			gap: var(--space-sm);
+		}
+		.divider::before,
+		.divider::after {
+			min-width: 12px;
+		}
 	}
 </style>

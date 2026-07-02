@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { untrack } from 'svelte';
+	import { tick, untrack } from 'svelte';
 	import { renderMarkdown } from '$lib/utils/markdown';
 	import { generateId, drafts, type Draft } from '$lib/stores/drafts';
 
@@ -30,6 +30,7 @@
 	let showMeta = $state(false);
 	let id = $state(untrack(() => draft?.id || generateId()));
 	let publishedAt = $state(untrack(() => draft?.publishedAt));
+	let contentTextarea = $state<HTMLTextAreaElement | null>(null);
 
 	let autoSaveTimer: ReturnType<typeof setTimeout>;
 
@@ -73,6 +74,56 @@
 	function removeTag(t: string) {
 		tags = tags.filter((x) => x !== t);
 	}
+
+	async function applyInlineMarkdown(before: string, after = before, placeholder = 'text') {
+		const textarea = contentTextarea;
+		if (!textarea) return;
+
+		const start = textarea.selectionStart ?? content.length;
+		const end = textarea.selectionEnd ?? content.length;
+		const selected = content.slice(start, end) || placeholder;
+
+		content = `${content.slice(0, start)}${before}${selected}${after}${content.slice(end)}`;
+		autoSave();
+
+		await tick();
+		textarea.focus();
+		textarea.setSelectionRange(start + before.length, start + before.length + selected.length);
+	}
+
+	async function applyBlockMarkdown(prefix: string, placeholder = 'text') {
+		const textarea = contentTextarea;
+		if (!textarea) return;
+
+		const start = textarea.selectionStart ?? content.length;
+		const end = textarea.selectionEnd ?? content.length;
+		const lineStart = content.lastIndexOf('\n', start - 1) + 1;
+		const lineEnd = end > start ? content.indexOf('\n', end) : content.indexOf('\n', start);
+		const safeLineEnd = lineEnd === -1 ? content.length : lineEnd;
+		const block = content.slice(lineStart, safeLineEnd) || placeholder;
+		const transformed = block
+			.split('\n')
+			.map((line) => (line.startsWith(prefix) ? line : `${prefix}${line}`))
+			.join('\n');
+
+		content = `${content.slice(0, lineStart)}${transformed}${content.slice(safeLineEnd)}`;
+		autoSave();
+
+		await tick();
+		textarea.focus();
+		textarea.setSelectionRange(lineStart + prefix.length, lineStart + transformed.length);
+	}
+
+	const markdownActions = [
+		{ label: 'Bold', run: () => applyInlineMarkdown('**', '**', 'bold text') },
+		{ label: 'Italic', run: () => applyInlineMarkdown('*', '*', 'italic text') },
+		{ label: 'Link', run: () => applyInlineMarkdown('[', '](https://example.com)', 'link text') },
+		{ label: 'Code', run: () => applyInlineMarkdown('`', '`', 'code') },
+		{ label: 'H1', run: () => applyBlockMarkdown('# ', 'Heading') },
+		{ label: 'H2', run: () => applyBlockMarkdown('## ', 'Heading') },
+		{ label: 'Quote', run: () => applyBlockMarkdown('> ', 'Quote') },
+		{ label: 'List', run: () => applyBlockMarkdown('- ', 'List item') }
+	];
 
 	function handlePublish() {
 		if (!title.trim() || !content.trim()) return;
@@ -147,6 +198,21 @@
 			</div>
 		{/if}
 
+		{#if !showPreview}
+			<div class="markdown-toolbar" aria-label="Markdown formatting tools">
+				{#each markdownActions as action}
+					<button
+						type="button"
+						class="markdown-button"
+						onmousedown={(e) => e.preventDefault()}
+						onclick={action.run}
+					>
+						{action.label}
+					</button>
+				{/each}
+			</div>
+		{/if}
+
 		{#if showPreview}
 			<div class="preview">
 				{@html renderMarkdown(content)}
@@ -156,6 +222,7 @@
 				class="content-input"
 				placeholder="Start writing..."
 				bind:value={content}
+				bind:this={contentTextarea}
 				oninput={autoSave}
 			></textarea>
 		{/if}
@@ -176,6 +243,7 @@
 		border-bottom: 1px solid var(--c-border);
 		background: var(--c-surface);
 		flex-shrink: 0;
+		flex-wrap: wrap;
 	}
 	.toolbar button {
 		font-size: 0.8125rem;
@@ -209,6 +277,19 @@
 		background: var(--c-bg);
 		border-radius: var(--radius);
 	}
+	.markdown-toolbar {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--space-xs);
+		padding: var(--space-sm);
+		background: var(--c-bg);
+		border: 1px solid var(--c-border);
+		border-radius: var(--radius);
+	}
+	.markdown-button {
+		font-size: 0.75rem;
+		padding: 2px 8px;
+	}
 	.content-input {
 		flex: 1;
 		border: none;
@@ -226,6 +307,14 @@
 		font-size: 1.125rem;
 		line-height: 1.8;
 		overflow-y: auto;
+	}
+	.preview :global(ul),
+	.preview :global(ol) {
+		margin: var(--space-md) 0;
+		padding-left: 1.5rem;
+	}
+	.preview :global(li + li) {
+		margin-top: 0.25rem;
 	}
 	.tags {
 		display: flex;
@@ -257,5 +346,38 @@
 		padding: 2px 6px;
 		border: 1px solid var(--c-border);
 		border-radius: 12px;
+	}
+
+	@media (max-width: 640px) {
+		.editor {
+			height: auto;
+			min-height: calc(100dvh - 48px);
+		}
+		.editor-body {
+			padding: var(--space-md);
+			gap: var(--space-sm);
+		}
+		.toolbar {
+			align-items: stretch;
+		}
+		.toolbar button {
+			flex: 1 1 calc(50% - var(--space-sm));
+		}
+		.markdown-toolbar {
+			padding: var(--space-xs);
+		}
+		.markdown-button {
+			flex: 1 1 calc(50% - var(--space-xs));
+		}
+		.title-input {
+			font-size: 1.25rem;
+		}
+		.content-input,
+		.preview {
+			font-size: 1rem;
+		}
+		.meta-panel {
+			padding: var(--space-sm);
+		}
 	}
 </style>

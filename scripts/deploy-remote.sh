@@ -248,6 +248,14 @@ sudo_run install -d -m 0755 "$INSTALL_DIR"
 sudo_run rsync -a --delete "$STAGING_DIR"/ "$INSTALL_DIR"/
 sudo_run chown -R "${SERVICE_USER}:${SERVICE_GROUP}" "$INSTALL_DIR"
 
+log "stopping existing service"
+sudo_run systemctl stop "${SERVICE_NAME}.service" 2>/dev/null || true
+
+if port_is_listening; then
+	choose_port
+	log "selected port ${PORT}"
+fi
+
 log "installing systemd service"
 tmp_service="/tmp/${SERVICE_NAME}.service"
 cat >"$tmp_service" <<SERVICEEOF

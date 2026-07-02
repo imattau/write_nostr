@@ -73,6 +73,7 @@
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
+		gap: var(--space-sm);
 		font-size: 0.75rem;
 		color: var(--c-text-secondary);
 	}
@@ -81,5 +82,18 @@
 		padding: 2px 8px;
 		color: var(--c-danger);
 		border-color: var(--c-danger);
+	}
+
+	@media (max-width: 640px) {
+		.drafts-page {
+			padding: var(--space-lg) 0;
+		}
+		.draft-meta {
+			flex-direction: column;
+			align-items: flex-start;
+		}
+		.delete {
+			align-self: flex-start;
+		}
 	}
 </style>

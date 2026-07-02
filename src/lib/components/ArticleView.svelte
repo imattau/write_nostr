@@ -162,6 +162,14 @@
 	.content :global(p) {
 		margin-bottom: var(--space-md);
 	}
+	.content :global(ul),
+	.content :global(ol) {
+		margin: var(--space-md) 0;
+		padding-left: 1.5rem;
+	}
+	.content :global(li + li) {
+		margin-top: 0.25rem;
+	}
 	.content :global(blockquote) {
 		border-left: 3px solid var(--c-accent);
 		padding-left: var(--space-md);
@@ -189,5 +197,60 @@
 	.content :global(a) {
 		color: var(--c-accent);
 		text-decoration: underline;
+	}
+
+	@media (max-width: 640px) {
+		.article {
+			padding: var(--space-lg) 0;
+		}
+		.header {
+			margin-bottom: var(--space-lg);
+		}
+		.featured-image {
+			margin-bottom: var(--space-md);
+			max-height: 240px;
+		}
+		.title-row {
+			flex-direction: column;
+			gap: var(--space-xs);
+		}
+		.title {
+			font-size: 1.5rem;
+		}
+		.lang-badge {
+			margin-top: 0;
+		}
+		.meta {
+			flex-wrap: wrap;
+			gap: var(--space-xs) var(--space-sm);
+		}
+		.author {
+			max-width: none;
+			white-space: normal;
+			word-break: break-word;
+		}
+		.summary {
+			font-size: 1rem;
+		}
+		.content {
+			font-size: 1rem;
+			line-height: 1.75;
+		}
+		.content :global(h2) {
+			font-size: 1.25rem;
+			margin-top: var(--space-lg);
+		}
+		.content :global(h3) {
+			font-size: 1.1rem;
+			margin-top: var(--space-md);
+		}
+		.content :global(pre) {
+			padding: var(--space-sm);
+			font-size: 0.75rem;
+		}
+		.content :global(ul),
+		.content :global(ol) {
+			padding-left: 1.25rem;
+		}
 	}
 </style>

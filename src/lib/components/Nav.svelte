@@ -44,6 +44,7 @@
 		align-items: center;
 		justify-content: space-between;
 		height: 48px;
+		gap: var(--space-md);
 	}
 	.logo {
 		font-weight: 700;
@@ -55,6 +56,8 @@
 		display: flex;
 		align-items: center;
 		gap: var(--space-md);
+		flex-wrap: wrap;
+		justify-content: flex-end;
 	}
 	.nav-link {
 		font-size: 0.875rem;
@@ -73,5 +76,30 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
+	}
+
+	@media (max-width: 640px) {
+		.nav-inner {
+			height: auto;
+			padding-top: var(--space-sm);
+			padding-bottom: var(--space-sm);
+			align-items: flex-start;
+			flex-direction: column;
+		}
+		.nav-links {
+			width: 100%;
+			justify-content: flex-start;
+			gap: var(--space-xs);
+		}
+		.nav-link,
+		.pubkey,
+		.nav-links button {
+			font-size: 0.8125rem;
+		}
+		.pubkey {
+			max-width: none;
+			white-space: normal;
+			word-break: break-word;
+		}
 	}
 </style>

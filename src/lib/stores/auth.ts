@@ -2,13 +2,20 @@ import { writable, derived } from 'svelte/store';
 import type { NostrEvent } from 'nostr-tools';
 
 export type Signer = {
-	type: 'extension' | 'nsec';
+	type: 'extension' | 'nsec' | 'passkey';
 	pubkey: string;
 	sign: (event: NostrEvent) => Promise<NostrEvent>;
 };
 
 function createAuthStore() {
 	const store = writable<Signer | null>(null);
+	let cleanupSigner: (() => void) | null = null;
+
+	function setSigner(signer: Signer, cleanup?: () => void) {
+		cleanupSigner?.();
+		cleanupSigner = cleanup ?? null;
+		store.set(signer);
+	}
 
 	function getNip07Signer(): Signer | null {
 		const win = window as unknown as Record<string, unknown>;
@@ -34,6 +41,7 @@ function createAuthStore() {
 		if (!signer) return null;
 		const win = window as unknown as { nostr: { getPublicKey: () => Promise<string> } };
 		signer.pubkey = await win.nostr.getPublicKey();
+		setSigner(signer);
 		return signer;
 	}
 
@@ -43,7 +51,7 @@ function createAuthStore() {
 		if (decoded.type !== 'nsec') throw new Error('Invalid nsec');
 		const sk = decoded.data as Uint8Array;
 		const pubkey = getPublicKey(sk);
-		return {
+		const signer: Signer = {
 			type: 'nsec',
 			pubkey,
 			sign: async (event: NostrEvent) => {
@@ -51,19 +59,72 @@ function createAuthStore() {
 				return signed as unknown as NostrEvent;
 			}
 		};
+		setSigner(signer, () => {
+			sk.fill(0);
+		});
+		sessionStorage.setItem('nsec_encrypted', nsec);
+		return signer;
+	}
+
+	async function loginWithPasskey(): Promise<Signer> {
+		const { buildPasskeySignerShim, isPRFSupported, unlockPasskeyIdentity } =
+			await import('nostr-passkey');
+
+		if (!(await isPRFSupported())) {
+			throw new Error('Passkeys are not supported in this browser');
+		}
+
+		const identity = await unlockPasskeyIdentity(undefined, {
+			rpName: 'write_nostr'
+		});
+		const shim = buildPasskeySignerShim(identity.secretKey);
+		sessionStorage.removeItem('nsec_encrypted');
+		const signer: Signer = {
+			type: 'passkey',
+			pubkey: identity.pubkey,
+			sign: async (event: NostrEvent) => {
+				const signed = await shim.signEvent(event as any);
+				return signed as unknown as NostrEvent;
+			}
+		};
+		setSigner(signer, () => shim.destroy());
+		return signer;
+	}
+
+	async function importPasskeyFromNsec(nsec: string): Promise<Signer> {
+		const { buildPasskeySignerShim, importPasskeyIdentityFromNsec, isPRFSupported } =
+			await import('nostr-passkey');
+
+		if (!(await isPRFSupported())) {
+			throw new Error('Passkeys are not supported in this browser');
+		}
+
+		const identity = await importPasskeyIdentityFromNsec(nsec, {
+			rpName: 'write_nostr'
+		});
+		const shim = buildPasskeySignerShim(identity.secretKey);
+		sessionStorage.removeItem('nsec_encrypted');
+		const signer: Signer = {
+			type: 'passkey',
+			pubkey: identity.pubkey,
+			sign: async (event: NostrEvent) => {
+				const signed = await shim.signEvent(event as any);
+				return signed as unknown as NostrEvent;
+			}
+		};
+		setSigner(signer, () => shim.destroy());
+		return signer;
 	}
 
 	async function init() {
 		const ext = await detectExtension();
 		if (ext) {
-			store.set(ext);
 			return;
 		}
 		const stored = sessionStorage.getItem('nsec_encrypted');
 		if (stored) {
 			try {
-				const signer = await loginWithNsec(stored);
-				store.set(signer);
+				await loginWithNsec(stored);
 			} catch {
 				sessionStorage.removeItem('nsec_encrypted');
 			}
@@ -71,6 +132,8 @@ function createAuthStore() {
 	}
 
 	function logout() {
+		cleanupSigner?.();
+		cleanupSigner = null;
 		sessionStorage.removeItem('nsec_encrypted');
 		store.set(null);
 	}
@@ -80,6 +143,8 @@ function createAuthStore() {
 		init,
 		loginWithNsec,
 		detectExtension,
+		loginWithPasskey,
+		importPasskeyFromNsec,
 		logout
 	};
 }

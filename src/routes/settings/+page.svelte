@@ -204,4 +204,44 @@
 		font-size: 0.875rem;
 		box-shadow: 0 2px 8px rgba(0,0,0,0.1);
 	}
+
+	@media (max-width: 640px) {
+		.settings {
+			padding: var(--space-lg) 0;
+			gap: var(--space-xl);
+		}
+		section {
+			padding-bottom: var(--space-md);
+		}
+		.relay-item {
+			flex-direction: column;
+			align-items: flex-start;
+			gap: var(--space-sm);
+		}
+		.relay-url {
+			word-break: break-word;
+		}
+		.add-relay {
+			flex-direction: column;
+		}
+		.relay-actions {
+			flex-direction: column;
+		}
+		.relay-actions button,
+		.add-relay button,
+		.pubkey-display button,
+		.danger {
+			width: 100%;
+		}
+		.pubkey-display {
+			align-items: flex-start;
+		}
+		.message {
+			left: var(--space-md);
+			right: var(--space-md);
+			bottom: var(--space-md);
+			transform: none;
+			width: auto;
+		}
+	}
 </style>

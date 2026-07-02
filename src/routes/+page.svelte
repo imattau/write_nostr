@@ -355,4 +355,29 @@
 		opacity: 0.6;
 		cursor: default;
 	}
+
+	@media (max-width: 640px) {
+		.feed-header {
+			display: flex;
+			flex-direction: column;
+			gap: var(--space-sm);
+			margin-bottom: var(--space-md);
+		}
+		.feed-controls {
+			width: 100%;
+			align-items: stretch;
+		}
+		.mode-tabs {
+			width: 100%;
+			flex-wrap: wrap;
+		}
+		.tab {
+			flex: 1 1 50%;
+			justify-content: center;
+		}
+		.refresh-btn {
+			width: 100%;
+			justify-content: center;
+		}
+	}
 </style>
