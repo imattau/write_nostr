@@ -73,6 +73,17 @@
 		articles.length > 0 ? Math.min(...articles.map((a) => a.created_at)) : undefined
 	);
 
+	/** Oldest timestamp among articles matching the active tag filter — used for tag-filtered pagination */
+	let oldestTaggedTimestamp = $derived(
+		tagFilter && articles.length > 0
+			? Math.min(
+					...articles
+						.filter((a) => a.tags.some(([k, v]) => k === 't' && v === tagFilter))
+						.map((a) => a.created_at)
+				)
+			: undefined
+	);
+
 	onMount(async () => {
 		await load('all');
 	});
@@ -130,15 +141,21 @@
 	}
 
 	async function loadMore() {
-		if (!oldestTimestamp || loadingMore || mode === 'top') return;
+		const cursor = tagFilter ? oldestTaggedTimestamp : oldestTimestamp;
+		if (!cursor || loadingMore || mode === 'top') return;
 		loadingMore = true;
 		const relayList = get(relays);
 		try {
 			let older: NostrEvent[];
 			if (mode === 'circle') {
-				older = await fetchOlderArticles(relayList, oldestTimestamp - 1, { authors: circleFollowing });
+				older = await fetchOlderArticles(relayList, cursor - 1, {
+					authors: circleFollowing,
+					...(tagFilter ? { tag: tagFilter } : {})
+				});
 			} else {
-				older = await fetchOlderArticles(relayList, oldestTimestamp - 1);
+				older = await fetchOlderArticles(relayList, cursor - 1, {
+					...(tagFilter ? { tag: tagFilter } : {})
+				});
 			}
 			// De-duplicate by id before appending
 			const existingIds = new Set(articles.map((a) => a.id));

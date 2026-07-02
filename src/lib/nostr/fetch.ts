@@ -27,9 +27,9 @@ function getPool(): SimplePool {
 
 export async function fetchArticles(
 	relayUrls: string[],
-	options?: { limit?: number; authors?: string[]; skipCache?: boolean }
+	options?: { limit?: number; authors?: string[]; tag?: string; skipCache?: boolean }
 ): Promise<NostrEvent[]> {
-	const { limit = 50, authors, skipCache = false } = options ?? {};
+	const { limit = 50, authors, tag, skipCache = false } = options ?? {};
 	if (authors && !authors.length) return [];
 	const groupKey = authors ? `articles-authors-${[...authors].sort().join(',')}` : 'articles-all';
 
@@ -40,7 +40,7 @@ export async function fetchArticles(
 		}
 	}
 
-	const filter: Filter = { kinds: [30023], ...(authors ? { authors } : {}), limit };
+	const filter: Filter = { kinds: [30023], ...(authors ? { authors } : {}), ...(tag ? { '#t': [tag] } : {}), limit };
 	const p = getPool();
 	const events = await p.querySync(relayUrls, filter);
 	const sorted = events.sort((a, b) => b.created_at - a.created_at);
@@ -59,13 +59,13 @@ export async function fetchArticles(
 export async function fetchOlderArticles(
 	relayUrls: string[],
 	until: number,
-	options?: { limit?: number; authors?: string[] }
+	options?: { limit?: number; authors?: string[]; tag?: string }
 ): Promise<NostrEvent[]> {
-	const { limit = 20, authors } = options ?? {};
+	const { limit = 20, authors, tag } = options ?? {};
 	if (authors && !authors.length) return [];
 	const groupKey = authors ? `articles-authors-${[...authors].sort().join(',')}` : 'articles-all';
 
-	const filter: Filter = { kinds: [30023], ...(authors ? { authors } : {}), until, limit };
+	const filter: Filter = { kinds: [30023], ...(authors ? { authors } : {}), ...(tag ? { '#t': [tag] } : {}), until, limit };
 	const p = getPool();
 	const events = await p.querySync(relayUrls, filter);
 	const sorted = events.sort((a, b) => b.created_at - a.created_at);

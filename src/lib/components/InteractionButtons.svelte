@@ -7,6 +7,7 @@
 	import { nwc } from '$lib/stores/nwc';
 	import { profileCache } from '$lib/stores/profiles';
 	import { publishLike, publishBoost } from '$lib/nostr/publish';
+	import { LRUMap } from '$lib/lru';
 
 	let { event }: { event: NostrEvent } = $props();
 
@@ -18,7 +19,7 @@
 	let boosted = $state(false);
 
 	type LnurlInfo = { callback: string; minSendable: number; maxSendable: number };
-	const lnurlCache = new Map<string, LnurlInfo | null>();
+	const lnurlCache = new LRUMap<string, LnurlInfo | null>(100);
 
 	let showZapPopover = $state(false);
 	let zapAmount = $state(21);

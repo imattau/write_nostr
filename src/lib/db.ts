@@ -29,6 +29,10 @@ export const TTL = {
 	relayList: 60 * 60 * 1000       // 1 hour
 } as const;
 
+// Maximum entries per store before oldest records are evicted
+const MAX_EVENTS = 2000;
+const MAX_PROFILES = 500;
+
 // ---------------------------------------------------------------------------
 // Schema
 // ---------------------------------------------------------------------------
@@ -123,6 +127,7 @@ export async function putEvents(events: NostrEvent[], groupKey: string): Promise
 		)
 	);
 	await tx.done;
+	await evictOldest(db, 'events', MAX_EVENTS);
 }
 
 /**
@@ -196,6 +201,7 @@ export async function putProfiles(profiles: Map<string, NostrProfile | null>): P
 		)
 	);
 	await tx.done;
+	await evictOldest(db, 'profiles', MAX_PROFILES);
 }
 
 /**
@@ -259,4 +265,37 @@ export async function pruneStaleCache(): Promise<void> {
 		pCursor = await pCursor.continue();
 	}
 	await profileTx.done;
+}
+
+/**
+ * If the store has more than `max` entries, delete the oldest records
+ * (by cachedAt) until the count is within the limit.
+ */
+async function evictOldest(
+	db: IDBPDatabase<NostrDBSchema>,
+	storeName: 'events' | 'profiles',
+	max: number
+): Promise<void> {
+	const tx = db.transaction(storeName, 'readonly');
+	const count = await tx.store.count();
+	if (count <= max) { await tx.done; return; }
+	await tx.done;
+
+	const readTx = db.transaction(storeName, 'readonly');
+	const all = await readTx.store.getAll();
+	await readTx.done;
+
+	all.sort((a, b) => a.cachedAt - b.cachedAt);
+
+	const toDelete = all.slice(0, all.length - max);
+	if (toDelete.length === 0) return;
+
+	const writeTx = db.transaction(storeName, 'readwrite');
+	await Promise.all(
+		toDelete.map((r) => {
+			const key = storeName === 'events' ? (r as CachedEvent).id : (r as CachedProfile).pubkey;
+			return writeTx.store.delete(key);
+		})
+	);
+	await writeTx.done;
 }

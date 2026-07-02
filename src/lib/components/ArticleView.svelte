@@ -3,6 +3,7 @@
 	import { nip19 } from 'nostr-tools';
 	import { renderMarkdown, extractNostrPubkeys } from '$lib/utils/markdown';
 	import { profileCache, requestProfiles, displayName } from '$lib/stores/profiles';
+	import type { NostrProfile } from '$lib/nostr/profiles';
 	import { relays } from '$lib/stores/relays';
 	import TranslateButton from '$lib/components/TranslateButton.svelte';
 	import InteractionButtons from '$lib/components/InteractionButtons.svelte';
@@ -69,7 +70,7 @@
 	function getNostrLinkLabel(
 		href: string,
 		innerHtml: string,
-		profileMap: Map<string, typeof $profileCache extends Map<string, infer T> ? T : never>
+		profileMap: { get(key: string): NostrProfile | null | undefined }
 	): string | null {
 		const match = href.match(/^https:\/\/njump\.me\/([a-z0-9]+)$/i);
 		if (!match) return null;
@@ -106,7 +107,7 @@
 
 	function renderContentHtml(
 		html: string,
-		profileMap: Map<string, typeof $profileCache extends Map<string, infer T> ? T : never>
+		profileMap: { get(key: string): NostrProfile | null | undefined }
 	): string {
 		return html.replace(
 			/<a\b([^>]*?)href="([^"]+)"([^>]*)>(.*?)<\/a>/g,

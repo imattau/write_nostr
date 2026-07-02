@@ -3,9 +3,10 @@ import { fetchProfiles, type NostrProfile } from '$lib/nostr/profiles';
 import { relays } from '$lib/stores/relays';
 import { nip19 } from 'nostr-tools';
 import { getProfiles, putProfiles } from '$lib/db';
+import { LRUMap } from '$lib/lru';
 
 // In-memory cache: pubkey → profile (undefined = not yet fetched, null = attempted, no result)
-const cache = writable<Map<string, NostrProfile | null>>(new Map());
+const cache = writable<LRUMap<string, NostrProfile | null>>(new LRUMap(500));
 
 // Track in-flight requests to avoid duplicate fetches
 const pending = new Set<string>();
@@ -128,7 +129,7 @@ export async function requestProfiles(pubkeys: string[]): Promise<void> {
  * Returns the display label for a pubkey.
  * Priority: display_name → name → npub (first 8 + last 4 chars)
  */
-export function displayName(pubkey: string, profileMap: Map<string, NostrProfile | null>): string {
+export function displayName(pubkey: string, profileMap: { get(key: string): NostrProfile | null | undefined }): string {
 	const profile = profileMap.get(pubkey);
 	if (profile) {
 		if (profile.display_name?.trim()) return profile.display_name.trim();
