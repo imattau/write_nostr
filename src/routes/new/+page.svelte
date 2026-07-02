@@ -3,9 +3,13 @@
 	import { publishArticle } from '$lib/nostr/publish';
 	import { auth } from '$lib/stores/auth';
 	import { goto } from '$app/navigation';
+	import { page } from '$app/stores';
+	import { drafts } from '$lib/stores/drafts';
 
 	let publishing = $state(false);
 	let result = $state<{ naddr?: string; error?: string }>({});
+
+	let draft = $derived($page.url.searchParams.get('id') ? drafts.getById($page.url.searchParams.get('id')!) : undefined);
 
 	async function handlePublish(opts: {
 		title: string;
@@ -50,7 +54,7 @@
 	<publishing>Publishing...</publishing>
 </div>
 
-<Editor onPublish={handlePublish} />
+<Editor {draft} onPublish={handlePublish} />
 
 <style>
 	.error-bar {

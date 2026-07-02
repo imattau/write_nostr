@@ -16,8 +16,8 @@
 					class="draft-item"
 					role="button"
 					tabindex="0"
-					onclick={() => goto('/new')}
-					onkeydown={(e) => e.key === 'Enter' && goto('/new')}
+					onclick={() => goto('/new?id=' + draft.id)}
+					onkeydown={(e) => e.key === 'Enter' && goto('/new?id=' + draft.id)}
 				>
 					<div class="draft-title">{draft.title || 'Untitled'}</div>
 					<div class="draft-meta">
