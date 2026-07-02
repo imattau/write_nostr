@@ -8,6 +8,8 @@ export type NostrProfile = {
 	picture?: string;
 	about?: string;
 	nip05?: string;
+	lud06?: string;
+	lud16?: string;
 };
 
 const DEFAULT_RELAYS = [
@@ -59,7 +61,9 @@ export async function fetchProfiles(
 				display_name: meta.display_name,
 				picture: meta.picture,
 				about: meta.about,
-				nip05: meta.nip05
+				nip05: meta.nip05,
+				lud06: meta.lud06,
+				lud16: meta.lud16
 			});
 		} catch {
 			// malformed content – store bare entry

@@ -5,6 +5,7 @@
 	import { profileCache, requestProfiles, displayName } from '$lib/stores/profiles';
 	import { relays } from '$lib/stores/relays';
 	import TranslateButton from '$lib/components/TranslateButton.svelte';
+	import InteractionButtons from '$lib/components/InteractionButtons.svelte';
 
 	let { event }: { event: NostrEvent } = $props();
 
@@ -139,6 +140,7 @@
 				{displayName(event.pubkey, $profileCache)}
 			</span>
 			<span class="date">{formatDate(getPublishedAt())}</span>
+			<InteractionButtons {event} />
 		</div>
 		{#if displaySummary}
 			<p class="summary">{displaySummary}</p>

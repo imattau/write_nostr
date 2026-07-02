@@ -1,9 +1,38 @@
 <script lang="ts">
 	import { relays, loadingRelays } from '$lib/stores/relays';
 	import { auth, pubkey } from '$lib/stores/auth';
+	import { nwc } from '$lib/stores/nwc';
 
 	let newRelay = $state('');
 	let message = $state('');
+	let nwcInput = $state('');
+	let nwcMessage = $state('');
+
+	async function connectNwc() {
+		try {
+			nwc.connect(nwcInput.trim());
+			nwcInput = '';
+			nwcMessage = 'Wallet connected!';
+			setTimeout(() => (nwcMessage = ''), 3000);
+		} catch {
+			nwcMessage = 'Invalid connection string';
+		}
+	}
+
+	async function checkBalance() {
+		try {
+			await nwc.getBalance();
+		} catch (e: any) {
+			nwcMessage = e.message || 'Failed to fetch balance';
+			setTimeout(() => (nwcMessage = ''), 3000);
+		}
+	}
+
+	function disconnectNwc() {
+		nwc.disconnect();
+		nwcMessage = 'Wallet disconnected';
+		setTimeout(() => (nwcMessage = ''), 3000);
+	}
 
 	function addRelay() {
 		const url = newRelay.trim();
@@ -75,6 +104,37 @@
 				<button onclick={copyPubkey}>Copy</button>
 			</div>
 			<button class="danger" onclick={() => auth.logout()}>Logout</button>
+		{/if}
+	</section>
+
+	<section>
+		<h2>Wallet</h2>
+		<p class="desc">Connect a Nostr Wallet Connect (NWC) wallet to send zaps on articles.</p>
+		{#if $nwc.connected}
+			<div class="nwc-status">
+				<span class="nwc-connected">Connected</span>
+				<code class="nwc-pubkey" title={$nwc.walletPubkey}>
+					{$nwc.walletPubkey.slice(0, 8)}...{$nwc.walletPubkey.slice(-4)}
+				</code>
+			</div>
+			<div class="nwc-balance">
+				<span class="label">Balance</span>
+				<code>{$nwc.balance !== null ? $nwc.balance.toLocaleString() + ' sats' : 'Unknown'}</code>
+				<button class="refresh" onclick={checkBalance} disabled={$nwc.balance === null}>Refresh</button>
+			</div>
+			<button class="danger" onclick={disconnectNwc}>Disconnect</button>
+		{:else}
+			<form class="nwc-connect" onsubmit={(e) => { e.preventDefault(); connectNwc(); }}>
+				<input
+					type="text"
+					placeholder="nostr+walletconnect://..."
+					bind:value={nwcInput}
+				/>
+				<button type="submit" disabled={!nwcInput.trim()}>Connect</button>
+			</form>
+		{/if}
+		{#if nwcMessage}
+			<p class="nwc-message">{nwcMessage}</p>
 		{/if}
 	</section>
 
@@ -191,6 +251,51 @@
 	.danger {
 		color: var(--c-danger);
 		border-color: var(--c-danger);
+	}
+	.nwc-status {
+		display: flex;
+		align-items: center;
+		gap: var(--space-sm);
+		margin-bottom: var(--space-sm);
+	}
+	.nwc-connected {
+		font-size: 0.8125rem;
+		color: #22c55e;
+		font-weight: 600;
+	}
+	.nwc-pubkey {
+		font-size: 0.75rem;
+		font-family: var(--font-mono);
+		background: var(--c-bg);
+		padding: 2px 6px;
+		border-radius: 4px;
+	}
+	.nwc-balance {
+		display: flex;
+		align-items: center;
+		gap: var(--space-sm);
+		margin-bottom: var(--space-md);
+	}
+	.nwc-balance .label {
+		font-size: 0.8125rem;
+		color: var(--c-text-secondary);
+	}
+	.nwc-balance code {
+		font-size: 0.8125rem;
+		font-family: var(--font-mono);
+	}
+	.nwc-connect {
+		display: flex;
+		gap: var(--space-sm);
+		margin-bottom: var(--space-sm);
+	}
+	.nwc-connect input {
+		flex: 1;
+	}
+	.nwc-message {
+		font-size: 0.8125rem;
+		color: var(--c-text-secondary);
+		margin-top: var(--space-sm);
 	}
 	.message {
 		position: fixed;

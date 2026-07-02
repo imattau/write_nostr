@@ -1,7 +1,7 @@
 import { SimplePool } from 'nostr-tools';
 import type { NostrEvent } from 'nostr-tools';
 import { get } from 'svelte/store';
-import { auth } from '$lib/stores/auth';
+import { auth, type Signer } from '$lib/stores/auth';
 import { relays } from '$lib/stores/relays';
 import { encodeNaddr } from '$lib/utils/nip19';
 
@@ -11,6 +11,72 @@ export type PublishResult = {
 	naddr?: string;
 	error?: string;
 };
+
+function getRelayUrl(relays: string[]): string {
+	return relays[0] || 'wss://relay.damus.io';
+}
+
+export async function publishLike(
+	article: NostrEvent,
+	liked: boolean,
+	signer: Signer,
+	relayUrls: string[]
+): Promise<PublishResult> {
+	const dTag = article.tags.find(([k]) => k === 'd')?.[1] || '';
+
+	const tags: string[][] = [
+		['e', article.id],
+		['p', article.pubkey]
+	];
+	if (dTag) {
+		tags.push(['a', `30023:${article.pubkey}:${dTag}`]);
+	}
+
+	const event: NostrEvent = {
+		kind: 7,
+		created_at: Math.floor(Date.now() / 1000),
+		content: liked ? '+' : '-',
+		tags,
+		pubkey: signer.pubkey
+	} as NostrEvent;
+
+	try {
+		const signed = await signer.sign(event);
+		const pool = new SimplePool();
+		await Promise.allSettled(pool.publish(relayUrls, signed));
+		return { success: true, event: signed };
+	} catch (err) {
+		return { success: false, error: String(err) };
+	}
+}
+
+export async function publishBoost(
+	article: NostrEvent,
+	signer: Signer,
+	relayUrls: string[]
+): Promise<PublishResult> {
+	const relayUrl = getRelayUrl(relayUrls);
+
+	const event: NostrEvent = {
+		kind: 6,
+		created_at: Math.floor(Date.now() / 1000),
+		content: '',
+		tags: [
+			['e', article.id, relayUrl],
+			['p', article.pubkey]
+		],
+		pubkey: signer.pubkey
+	} as NostrEvent;
+
+	try {
+		const signed = await signer.sign(event);
+		const pool = new SimplePool();
+		await Promise.allSettled(pool.publish(relayUrls, signed));
+		return { success: true, event: signed };
+	} catch (err) {
+		return { success: false, error: String(err) };
+	}
+}
 
 export async function publishArticle(opts: {
 	title: string;
