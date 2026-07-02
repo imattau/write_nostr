@@ -24,6 +24,8 @@
 	let zapError = $state('');
 	let zapSuccess = $state(false);
 	let zapChecking = $state(false);
+	let zapTooltip = $state('');
+	let zapTooltipTimer: ReturnType<typeof setTimeout> | null = $state(null);
 	let lnurlInfo: {
 		callback: string;
 		minSendable: number;
@@ -84,11 +86,17 @@
 		}
 	}
 
+	function showTooltip(msg: string) {
+		if (zapTooltipTimer) clearTimeout(zapTooltipTimer);
+		zapTooltip = msg;
+		zapTooltipTimer = setTimeout(() => { zapTooltip = ''; }, 3000);
+	}
+
 	async function openZapPopover() {
 		zapError = '';
 		zapSuccess = false;
 		if (!nwcOk) {
-			zapError = 'Configure NWC in Settings';
+			showTooltip('Set up NWC in Settings to zap');
 			return;
 		}
 		if (lnurlInfo) {
@@ -99,7 +107,7 @@
 		try {
 			const profile = $profileCache.get(event.pubkey);
 			if (!profile || (!profile.lud06 && !profile.lud16)) {
-				zapError = 'Author does not accept zaps';
+				showTooltip('Author does not accept zaps');
 				return;
 			}
 			let lnurlUrl: string;
@@ -115,7 +123,7 @@
 			const res = await fetch(lnurlUrl);
 			const body = await res.json();
 			if (!body.allowsNostr || !body.nostrPubkey) {
-				zapError = 'Author does not accept zaps';
+				showTooltip('Author does not accept zaps');
 				return;
 			}
 			lnurlInfo = {
@@ -125,7 +133,7 @@
 			};
 			showZapPopover = true;
 		} catch {
-			zapError = 'Failed to fetch zap info';
+			showTooltip('Failed to fetch zap info');
 		} finally {
 			zapChecking = false;
 		}
@@ -233,6 +241,10 @@
 	</button>
 </div>
 
+{#if zapTooltip}
+	<div class="zap-tooltip">{zapTooltip}</div>
+{/if}
+
 {#if showZapPopover}
 	<div class="zap-overlay" onclick={closeZapPopover} onkeydown={(e) => e.key === 'Escape' && closeZapPopover()} role="presentation">
 		<!-- svelte-ignore a11y_click_events_have_key_events -->
@@ -273,6 +285,7 @@
 
 <style>
 	.interactions {
+		position: relative;
 		display: flex;
 		align-items: center;
 		gap: var(--space-xs);
@@ -316,6 +329,26 @@
 	}
 	.zap-btn {
 		color: #eab308;
+	}
+	.zap-tooltip {
+		position: absolute;
+		top: 100%;
+		right: 0;
+		margin-top: 4px;
+		padding: 4px 10px;
+		background: var(--c-surface);
+		border: 1px solid var(--c-border);
+		border-radius: var(--radius);
+		font-size: 0.75rem;
+		color: var(--c-text-secondary);
+		white-space: nowrap;
+		box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+		z-index: 20;
+		animation: fadeIn 0.15s ease-out;
+	}
+	@keyframes fadeIn {
+		from { opacity: 0; transform: translateY(-2px); }
+		to { opacity: 1; transform: translateY(0); }
 	}
 	@keyframes pulse {
 		0%, 100% { opacity: 0.5; }
