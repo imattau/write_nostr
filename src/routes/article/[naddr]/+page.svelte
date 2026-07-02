@@ -17,7 +17,7 @@
 		loading = true;
 		error = '';
 		try {
-			const naddr = $page.params.naddr;
+			const naddr = $page.params.naddr ?? '';
 			const result = await resolveNaddr(naddr);
 			if (result.event) {
 				event = result.event;

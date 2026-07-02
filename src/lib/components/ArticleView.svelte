@@ -2,11 +2,22 @@
 	import type { NostrEvent } from 'nostr-tools';
 	import { renderMarkdown } from '$lib/utils/markdown';
 	import { profileCache, requestProfiles, displayName } from '$lib/stores/profiles';
+	import TranslateButton from '$lib/components/TranslateButton.svelte';
 
 	let { event }: { event: NostrEvent } = $props();
 
+	// Translation overlay – null means show the original
+	type Translation = { title: string; summary: string; contentHtml: string; targetLang: string } | null;
+	let translation = $state<Translation>(null);
+
 	$effect(() => {
 		if (event?.pubkey) requestProfiles([event.pubkey]);
+	});
+
+	// Clear translation whenever the underlying event changes
+	$effect(() => {
+		event;
+		translation = null;
 	});
 
 	function getTitle(): string {
@@ -36,6 +47,13 @@
 			day: 'numeric'
 		});
 	}
+
+	// Derived display values – prefer translation when available
+	let displayTitle = $derived(translation?.title || getTitle());
+	let displaySummary = $derived(translation?.summary || getSummary());
+	let displayContentHtml = $derived(
+		translation?.contentHtml ?? renderMarkdown(event.content)
+	);
 </script>
 
 <article class="article">
@@ -43,19 +61,29 @@
 		{#if getImage()}
 			<img class="featured-image" src={getImage()} alt="" />
 		{/if}
-		<h1 class="title">{getTitle()}</h1>
+		<div class="title-row">
+			<h1 class="title">{displayTitle}</h1>
+			{#if translation}
+				<span class="lang-badge" title="Translated by Chrome AI on device">
+					{translation.targetLang.toUpperCase()}
+				</span>
+			{/if}
+		</div>
 		<div class="meta">
 			<span class="author" title={event.pubkey}>
 				{displayName(event.pubkey, $profileCache)}
 			</span>
 			<span class="date">{formatDate(getPublishedAt())}</span>
 		</div>
-		{#if getSummary()}
-			<p class="summary">{getSummary()}</p>
+		{#if displaySummary}
+			<p class="summary">{displaySummary}</p>
 		{/if}
 	</header>
+
+	<TranslateButton {event} onTranslated={(t) => (translation = t)} />
+
 	<div class="content">
-		{@html renderMarkdown(event.content)}
+		{@html displayContentHtml}
 	</div>
 </article>
 
@@ -64,7 +92,7 @@
 		padding: var(--space-2xl) 0;
 	}
 	.header {
-		margin-bottom: var(--space-2xl);
+		margin-bottom: var(--space-xl);
 	}
 	.featured-image {
 		width: 100%;
@@ -73,11 +101,30 @@
 		max-height: 400px;
 		object-fit: cover;
 	}
+	.title-row {
+		display: flex;
+		align-items: flex-start;
+		gap: var(--space-sm);
+		margin-bottom: var(--space-md);
+	}
 	.title {
 		font-size: 2rem;
 		font-weight: 700;
 		line-height: 1.2;
-		margin-bottom: var(--space-md);
+		flex: 1;
+	}
+	.lang-badge {
+		flex-shrink: 0;
+		margin-top: 6px;
+		font-size: 0.6875rem;
+		font-weight: 600;
+		letter-spacing: 0.05em;
+		padding: 2px 7px;
+		border-radius: 20px;
+		background: color-mix(in srgb, var(--c-accent) 12%, transparent);
+		color: var(--c-accent);
+		border: 1px solid color-mix(in srgb, var(--c-accent) 25%, transparent);
+		font-family: var(--font-mono);
 	}
 	.meta {
 		display: flex;

@@ -43,17 +43,21 @@ export async function requestProfiles(pubkeys: string[]): Promise<void> {
 		const stillMissing = needFetch.filter((pk) => !dbProfiles.has(pk));
 		if (stillMissing.length === 0) return;
 
-		// 3. Fetch from relay
+		// 3. Skip relay fetch if no relays are configured yet — release pending
+		//    locks so the next requestProfiles call can retry once relays load.
 		const relayList = get(relays);
+		if (relayList.length === 0) return;
+
 		const fetched = await fetchProfiles(stillMissing, relayList);
 
 		// 4. Persist to IndexedDB
 		if (fetched.size > 0) await putProfiles(fetched);
 
-		// 5. Update in-memory store
+		// 5. Update in-memory store — only write keys that actually resolved.
+		//    Keys that returned nothing are left absent so they can be retried.
 		cache.update((map) => {
-			for (const pk of stillMissing) {
-				map.set(pk, fetched.get(pk) ?? null);
+			for (const [pk, profile] of fetched) {
+				map.set(pk, profile);
 			}
 			return map;
 		});

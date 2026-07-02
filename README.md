@@ -40,3 +40,13 @@ npm run build
 You can preview the production build with `npm run preview`.
 
 > To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
+
+## Deployment
+
+For a remote static deployment, use:
+
+```bash
+npm run deploy -- --host deploy@example.com --domain write.example.com
+```
+
+The deploy script lives in [`scripts/deploy-remote.sh`](scripts/deploy-remote.sh) and uses [`scripts/spa-http-server.py`](scripts/spa-http-server.py) on the remote host.

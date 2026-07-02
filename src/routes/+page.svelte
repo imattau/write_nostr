@@ -9,7 +9,9 @@
 		fetchArticles,
 		fetchFollowList,
 		fetchArticlesByAuthors,
-		fetchInteractionScores
+		fetchInteractionScores,
+		fetchOlderArticles,
+		fetchOlderArticlesByAuthors
 	} from '$lib/nostr/fetch';
 	import ArticleCard from '$lib/components/ArticleCard.svelte';
 
@@ -19,11 +21,19 @@
 	let articles = $state<NostrEvent[]>([]);
 	let scores = $state<Map<string, number>>(new Map());
 	let loading = $state(true);
+	let loadingMore = $state(false);
 	let scoringLoading = $state(false);
 	let error = $state('');
+	/** Pubkeys followed by the current user — kept so loadMore can reuse them */
+	let circleFollowing = $state<string[]>([]);
 
 	/** Articles with blocked authors filtered out — updates reactively when blocks change */
 	let visibleArticles = $derived(articles.filter((a) => !$blocks.has(a.pubkey)));
+
+	/** Oldest timestamp among loaded articles — used as `until` cursor for pagination */
+	let oldestTimestamp = $derived(
+		articles.length > 0 ? Math.min(...articles.map((a) => a.created_at)) : undefined
+	);
 
 	onMount(async () => {
 		await load('all');
@@ -54,6 +64,7 @@
 					loading = false;
 					return;
 				}
+				circleFollowing = following;
 				articles = await fetchArticlesByAuthors(following, relayList);
 			} else if (nextMode === 'top') {
 				// Fetch a wider pool then score them
@@ -77,6 +88,28 @@
 		}
 
 		loading = false;
+	}
+
+	async function loadMore() {
+		if (!oldestTimestamp || loadingMore || mode === 'top') return;
+		loadingMore = true;
+		const relayList = get(relays);
+		try {
+			let older: NostrEvent[];
+			if (mode === 'circle') {
+				older = await fetchOlderArticlesByAuthors(circleFollowing, relayList, oldestTimestamp - 1);
+			} else {
+				older = await fetchOlderArticles(relayList, oldestTimestamp - 1);
+			}
+			// De-duplicate by id before appending
+			const existingIds = new Set(articles.map((a) => a.id));
+			const newOnes = older.filter((a) => !existingIds.has(a.id));
+			if (newOnes.length) articles = [...articles, ...newOnes];
+		} catch {
+			// silently fail — don't clear the existing feed
+		} finally {
+			loadingMore = false;
+		}
 	}
 </script>
 
@@ -169,6 +202,25 @@
 				/>
 			{/each}
 		</div>
+		{#if mode !== 'top'}
+			<div class="load-more-wrap">
+				<button
+					class="load-more-btn"
+					onclick={loadMore}
+					disabled={loadingMore}
+					aria-label="Load older articles"
+				>
+					{#if loadingMore}
+						<svg class="spinning" width="14" height="14" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+							<path d="M13.65 2.35A8 8 0 1 0 15 8h-2a6 6 0 1 1-1.06-3.41L9 7h6V1l-1.35 1.35z"/>
+						</svg>
+						Loading…
+					{:else}
+						Load More
+					{/if}
+				</button>
+			</div>
+		{/if}
 	{/if}
 </div>
 
@@ -274,5 +326,33 @@
 		color: var(--c-text-secondary);
 		text-align: center;
 		padding: var(--space-2xl) 0;
+	}
+
+	/* Load More */
+	.load-more-wrap {
+		display: flex;
+		justify-content: center;
+		margin-top: var(--space-lg);
+	}
+	.load-more-btn {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		font-size: 0.875rem;
+		padding: 8px 24px;
+		border-radius: var(--radius);
+		background: transparent;
+		border: 1px solid var(--c-border);
+		color: var(--c-text-secondary);
+		transition: background 0.15s, color 0.15s, border-color 0.15s;
+	}
+	.load-more-btn:hover:not(:disabled) {
+		background: var(--c-surface);
+		color: var(--c-text);
+		border-color: var(--c-accent);
+	}
+	.load-more-btn:disabled {
+		opacity: 0.6;
+		cursor: default;
 	}
 </style>

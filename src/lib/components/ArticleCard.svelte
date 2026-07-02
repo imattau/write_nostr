@@ -13,11 +13,16 @@
 		loadSocialLists
 	} from '$lib/stores/social';
 
-	let { event, relays, score = undefined }: { event: NostrEvent; relays: string[]; score?: number } = $props();
+	import { relays } from '$lib/stores/relays';
 
-	// Request profile for author whenever event changes
+	let { event, relays: relaysProp, score = undefined }: { event: NostrEvent; relays: string[]; score?: number } = $props();
+
+	// Request profile for author whenever the event or relay list changes.
+	// Tracking $relays ensures a retry when relays become available after a
+	// fast cache-hit render (which is the root cause of missing names on
+	// My Circle — articles load from IndexedDB before relays are ready).
 	$effect(() => {
-		if (event?.pubkey) requestProfiles([event.pubkey]);
+		if (event?.pubkey && $relays.length > 0) requestProfiles([event.pubkey]);
 	});
 
 	// Load social lists once when we have a logged-in user
@@ -57,7 +62,7 @@
 	}
 
 	const MAX_TAGS = 3;
-	let naddr = $derived(encodeNaddr(event.pubkey, getIdentifier(), relays));
+	let naddr = $derived(encodeNaddr(event.pubkey, getIdentifier(), relaysProp));
 	let visibleTags = $derived(getTags().slice(0, MAX_TAGS));
 	let hiddenTagCount = $derived(Math.max(0, getTags().length - MAX_TAGS));
 
@@ -187,6 +192,7 @@
 		margin-bottom: var(--space-sm);
 		display: -webkit-box;
 		-webkit-line-clamp: 2;
+		line-clamp: 2;
 		-webkit-box-orient: vertical;
 		overflow: hidden;
 	}

@@ -47,6 +47,25 @@ export async function fetchArticles(relayUrls: string[], limit = 50): Promise<No
 	return sorted;
 }
 
+/**
+ * Fetch older articles (for "Load More" pagination).
+ * Bypasses the cache — fetches directly from relays using `until` cursor.
+ * Results are appended to the `articles-all` cache group so subsequent
+ * page loads don't need to re-fetch them.
+ */
+export async function fetchOlderArticles(
+	relayUrls: string[],
+	until: number,
+	limit = 20
+): Promise<NostrEvent[]> {
+	const filter: Filter = { kinds: [30023], until, limit };
+	const p = getPool();
+	const events = await p.querySync(relayUrls, filter);
+	const sorted = events.sort((a, b) => b.created_at - a.created_at);
+	if (sorted.length > 0) await putEvents(sorted, ARTICLES_ALL_KEY);
+	return sorted;
+}
+
 export async function fetchArticleByIdentifier(
 	pubkey: string,
 	identifier: string,
@@ -132,6 +151,27 @@ export async function fetchArticlesByAuthors(
 	// 3. Persist to cache
 	await putEvents(sorted, groupKey);
 
+	return sorted;
+}
+
+/**
+ * Fetch older articles by authors (for "Load More" pagination).
+ * Bypasses the cache — fetches directly from relays using `until` cursor.
+ * Results are appended to the same authors group key as the initial fetch.
+ */
+export async function fetchOlderArticlesByAuthors(
+	authors: string[],
+	relayUrls: string[],
+	until: number,
+	limit = 20
+): Promise<NostrEvent[]> {
+	if (!authors.length) return [];
+	const groupKey = `articles-authors-${[...authors].sort().join(',')}`;
+	const filter: Filter = { kinds: [30023], authors, until, limit };
+	const p = getPool();
+	const events = await p.querySync(relayUrls, filter);
+	const sorted = events.sort((a, b) => b.created_at - a.created_at);
+	if (sorted.length > 0) await putEvents(sorted, groupKey);
 	return sorted;
 }
 

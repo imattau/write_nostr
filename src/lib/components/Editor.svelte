@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import { renderMarkdown } from '$lib/utils/markdown';
 	import { generateId, drafts, type Draft } from '$lib/stores/drafts';
 
@@ -17,16 +18,18 @@
 		}) => void;
 	} = $props();
 
-	let title = $state(draft?.title || '');
-	let content = $state(draft?.content || '');
-	let summary = $state(draft?.summary || '');
-	let image = $state(draft?.image || '');
+	// untrack() reads the prop value once without registering a reactive dependency,
+	// which is the correct Svelte 5 pattern for initialising editable state from props.
+	let title = $state(untrack(() => draft?.title || ''));
+	let content = $state(untrack(() => draft?.content || ''));
+	let summary = $state(untrack(() => draft?.summary || ''));
+	let image = $state(untrack(() => draft?.image || ''));
 	let tagInput = $state('');
-	let tags = $state<string[]>(draft?.tags || []);
+	let tags = $state<string[]>(untrack(() => draft?.tags || []));
 	let showPreview = $state(false);
 	let showMeta = $state(false);
-	let id = $state(draft?.id || generateId());
-	let publishedAt = $state(draft?.publishedAt);
+	let id = $state(untrack(() => draft?.id || generateId()));
+	let publishedAt = $state(untrack(() => draft?.publishedAt));
 
 	let autoSaveTimer: ReturnType<typeof setTimeout>;
 
