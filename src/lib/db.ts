@@ -52,7 +52,7 @@ interface CachedEvent {
 
 interface CachedProfile {
 	pubkey: string;
-	profile: NostrProfile;
+	profile: NostrProfile | null;
 	cachedAt: number;
 }
 
@@ -166,9 +166,9 @@ export async function getEvent(
 // ---------------------------------------------------------------------------
 
 /**
- * Store a map of pubkey → profile.
+ * Store a map of pubkey → profile (null = pubkey has no kind-0 event).
  */
-export async function putProfiles(profiles: Map<string, NostrProfile>): Promise<void> {
+export async function putProfiles(profiles: Map<string, NostrProfile | null>): Promise<void> {
 	if (typeof window === 'undefined') return;
 	const db = await getDB();
 	const tx = db.transaction('profiles', 'readwrite');
@@ -184,15 +184,16 @@ export async function putProfiles(profiles: Map<string, NostrProfile>): Promise<
 /**
  * Retrieve profiles for a list of pubkeys.
  * Returns a map of only the fresh, cached entries.
- * Keys not present in the returned map need to be fetched from relays.
+ * A value of null means the pubkey has no kind-0 event.
+ * Keys not in the returned map need to be fetched from relays.
  */
 export async function getProfiles(
 	pubkeys: string[],
 	ttl: number = TTL.profiles
-): Promise<Map<string, NostrProfile>> {
+): Promise<Map<string, NostrProfile | null>> {
 	if (typeof window === 'undefined') return new Map();
 	const db = await getDB();
-	const result = new Map<string, NostrProfile>();
+	const result = new Map<string, NostrProfile | null>();
 
 	await Promise.all(
 		pubkeys.map(async (pk) => {

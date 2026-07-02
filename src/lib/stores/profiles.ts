@@ -68,24 +68,29 @@ async function flushQueuedProfiles(): Promise<void> {
 		const stillMissing = batch.filter((pk) => !dbProfiles.has(pk));
 		if (stillMissing.length === 0) return;
 
-		// 3. Skip relay fetch if no relays are configured yet. The queued request
-		//    remains unresolved in memory so a later call can retry cleanly.
+		// 3. Fetch from relays if any are configured. If none are available yet
+		//    the stillMissing pubkeys stay out of cache so they'll retry later.
 		const relayList = get(relays);
-		if (relayList.length === 0) return;
+		if (relayList.length > 0) {
+			const fetched = await fetchProfiles(stillMissing, relayList);
 
-		const fetched = await fetchProfiles(stillMissing, relayList);
+			// 4. Persist resolved profiles to IndexedDB
+			if (fetched.size > 0) await putProfiles(fetched);
 
-		// 4. Persist to IndexedDB
-		if (fetched.size > 0) await putProfiles(fetched);
+			// 5. Update in-memory store — set null for pubkeys that returned nothing
+			//    so they aren't re-fetched on every request.
+			const unresolved = stillMissing.filter((pk) => !fetched.has(pk));
+			const nullEntries = new Map(
+				unresolved.map((pk) => [pk, null as NostrProfile | null])
+			);
+			if (nullEntries.size > 0) await putProfiles(nullEntries);
 
-		// 5. Update in-memory store — only write keys that actually resolved.
-		//    Keys that returned nothing are left absent so they can be retried.
-		cache.update((map) => {
-			for (const [pk, profile] of fetched) {
-				map.set(pk, profile);
-			}
-			return map;
-		});
+			cache.update((map) => {
+				for (const [pk, profile] of fetched) map.set(pk, profile);
+				for (const pk of unresolved) map.set(pk, null);
+				return map;
+			});
+		}
 	} finally {
 		for (const pk of batch) pending.delete(pk);
 		if (queued.size > 0) {
