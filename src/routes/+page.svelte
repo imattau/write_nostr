@@ -4,6 +4,7 @@
 	import type { NostrEvent } from 'nostr-tools';
 	import { relays } from '$lib/stores/relays';
 	import { pubkey } from '$lib/stores/auth';
+	import { blocks } from '$lib/stores/social';
 	import {
 		fetchArticles,
 		fetchFollowList,
@@ -20,6 +21,9 @@
 	let loading = $state(true);
 	let scoringLoading = $state(false);
 	let error = $state('');
+
+	/** Articles with blocked authors filtered out — updates reactively when blocks change */
+	let visibleArticles = $derived(articles.filter((a) => !$blocks.has(a.pubkey)));
 
 	onMount(async () => {
 		await load('all');
@@ -157,7 +161,7 @@
 			</p>
 		{/if}
 		<div class="article-list">
-			{#each articles as article (article.id)}
+			{#each visibleArticles as article (article.id)}
 				<ArticleCard
 					event={article}
 					relays={$relays}
