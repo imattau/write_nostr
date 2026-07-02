@@ -62,4 +62,4 @@ Environment overrides:
 
 Tiny static server used by the remote systemd unit.
 
-It serves the built `dist/` directory and falls back to `index.html` for SPA routes.
+It serves the built `build/` directory and falls back to `index.html` for SPA routes.

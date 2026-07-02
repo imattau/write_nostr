@@ -131,15 +131,15 @@ sync_app() {
 		--exclude='.claude' \
 		--exclude='node_modules' \
 		--exclude='.svelte-kit' \
-		--exclude='dist' \
+		--exclude='build' \
 		--exclude='coverage' \
 		"${REPO_ROOT}/" "${SSH_TARGET}:${REMOTE_STAGE_DIR}/"
 
-	if [[ -d "${REPO_ROOT}/dist" ]]; then
+	if [[ -d "${REPO_ROOT}/build" ]]; then
 		log "syncing build artifacts"
 		run_local rsync -az --delete --no-owner --no-group \
 			-e "$(rsync_ssh_cmd)" \
-			"${REPO_ROOT}/dist/" "${SSH_TARGET}:${REMOTE_STAGE_DIR}/dist/"
+			"${REPO_ROOT}/build/" "${SSH_TARGET}:${REMOTE_STAGE_DIR}/build/"
 	fi
 }
 
@@ -212,8 +212,8 @@ choose_port() {
 }
 
 verify_build_artifacts() {
-	if [[ ! -f "${INSTALL_DIR}/dist/index.html" ]]; then
-		die "missing build artifact at ${INSTALL_DIR}/dist/index.html"
+	if [[ ! -f "${INSTALL_DIR}/build/index.html" ]]; then
+		die "missing build artifact at ${INSTALL_DIR}/build/index.html"
 	fi
 }
 
@@ -260,7 +260,7 @@ Type=simple
 WorkingDirectory=${INSTALL_DIR}
 User=${SERVICE_USER}
 Group=${SERVICE_GROUP}
-ExecStart=python3 ${INSTALL_DIR}/scripts/spa-http-server.py ${INSTALL_DIR}/dist --bind 127.0.0.1 --port ${PORT}
+ExecStart=python3 ${INSTALL_DIR}/scripts/spa-http-server.py ${INSTALL_DIR}/build --bind 127.0.0.1 --port ${PORT}
 Restart=always
 RestartSec=5
 
