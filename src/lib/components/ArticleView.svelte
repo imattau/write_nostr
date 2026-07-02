@@ -1,7 +1,9 @@
 <script lang="ts">
 	import type { NostrEvent } from 'nostr-tools';
-	import { renderMarkdown } from '$lib/utils/markdown';
+	import { nip19 } from 'nostr-tools';
+	import { renderMarkdown, extractNostrPubkeys } from '$lib/utils/markdown';
 	import { profileCache, requestProfiles, displayName } from '$lib/stores/profiles';
+	import { relays } from '$lib/stores/relays';
 	import TranslateButton from '$lib/components/TranslateButton.svelte';
 
 	let { event }: { event: NostrEvent } = $props();
@@ -11,7 +13,15 @@
 	let translation = $state<Translation>(null);
 
 	$effect(() => {
+		$relays;
 		if (event?.pubkey) requestProfiles([event.pubkey]);
+	});
+
+	$effect(() => {
+		$relays;
+		if (!event?.content) return;
+		const linkedPubkeys = extractNostrPubkeys(event.content);
+		if (linkedPubkeys.length > 0) requestProfiles(linkedPubkeys);
 	});
 
 	// Clear translation whenever the underlying event changes
@@ -54,6 +64,61 @@
 	let displayContentHtml = $derived(
 		translation?.contentHtml ?? renderMarkdown(event.content)
 	);
+
+	function getNostrLinkLabel(
+		href: string,
+		innerHtml: string,
+		profileMap: Map<string, typeof $profileCache extends Map<string, infer T> ? T : never>
+	): string | null {
+		const match = href.match(/^https:\/\/njump\.me\/([a-z0-9]+)$/i);
+		if (!match) return null;
+
+		const code = match[1];
+		const rawText = innerHtml.replace(/<[^>]*>/g, '').trim();
+		const rawHref = `nostr:${code}`;
+		const renderedHref = `https://njump.me/${code}`;
+
+		if (rawText !== rawHref && rawText !== code && rawText !== renderedHref) {
+			return null;
+		}
+
+		try {
+			const decoded = nip19.decode(code);
+			if (decoded.type === 'npub') {
+				return displayName(decoded.data, profileMap);
+			}
+			if (decoded.type === 'nprofile') {
+				return displayName(decoded.data.pubkey, profileMap);
+			}
+			if (decoded.type === 'naddr') {
+				return displayName(decoded.data.pubkey, profileMap);
+			}
+			if (decoded.type === 'nevent' && decoded.data.author) {
+				return displayName(decoded.data.author, profileMap);
+			}
+		} catch {
+			// Ignore invalid Nostr URIs and leave the label unchanged.
+		}
+
+		return null;
+	}
+
+	function renderContentHtml(
+		html: string,
+		profileMap: Map<string, typeof $profileCache extends Map<string, infer T> ? T : never>
+	): string {
+		return html.replace(
+			/<a\b([^>]*?)href="([^"]+)"([^>]*)>(.*?)<\/a>/g,
+			(match, before, href, after, innerHtml) => {
+				const label = getNostrLinkLabel(href, innerHtml, profileMap);
+				if (!label) return match;
+				return `<a${before}href="${href}"${after}>${label}</a>`;
+			}
+		);
+	}
+
+	let profileMap = $derived($profileCache);
+	let renderedContentHtml = $derived(renderContentHtml(displayContentHtml, profileMap));
 </script>
 
 <article class="article">
@@ -83,7 +148,7 @@
 	<TranslateButton {event} onTranslated={(t) => (translation = t)} />
 
 	<div class="content">
-		{@html displayContentHtml}
+		{@html renderedContentHtml}
 	</div>
 </article>
 

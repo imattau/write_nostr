@@ -12,7 +12,10 @@
 
 <nav class="nav">
 	<div class="nav-inner container">
-		<a href="/" class="logo">write_nostr</a>
+		<a href="/" class="logo" aria-label="write_nostr home">
+			<img class="logo-mark" src="/brand/pen-logo-compact.png" alt="" aria-hidden="true" />
+			<span class="logo-text">write_nostr</span>
+		</a>
 		<div class="nav-links">
 			{#if $pubkey}
 				<a href="/new" class="nav-link" class:active={$page.url.pathname === '/new'}>
@@ -47,10 +50,24 @@
 		gap: var(--space-md);
 	}
 	.logo {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--space-sm);
 		font-weight: 700;
 		font-size: 1rem;
 		color: var(--c-text);
 		letter-spacing: -0.02em;
+		flex-shrink: 0;
+	}
+	.logo-mark {
+		width: 20px;
+		height: 20px;
+		display: block;
+		object-fit: contain;
+		flex-shrink: 0;
+	}
+	.logo-text {
+		line-height: 1;
 	}
 	.nav-links {
 		display: flex;
@@ -90,6 +107,10 @@
 			width: 100%;
 			justify-content: flex-start;
 			gap: var(--space-xs);
+		}
+		.logo-mark {
+			width: 18px;
+			height: 18px;
 		}
 		.nav-link,
 		.pubkey,

@@ -115,14 +115,30 @@
 	}
 
 	const markdownActions = [
-		{ label: 'Bold', run: () => applyInlineMarkdown('**', '**', 'bold text') },
-		{ label: 'Italic', run: () => applyInlineMarkdown('*', '*', 'italic text') },
-		{ label: 'Link', run: () => applyInlineMarkdown('[', '](https://example.com)', 'link text') },
-		{ label: 'Code', run: () => applyInlineMarkdown('`', '`', 'code') },
-		{ label: 'H1', run: () => applyBlockMarkdown('# ', 'Heading') },
-		{ label: 'H2', run: () => applyBlockMarkdown('## ', 'Heading') },
-		{ label: 'Quote', run: () => applyBlockMarkdown('> ', 'Quote') },
-		{ label: 'List', run: () => applyBlockMarkdown('- ', 'List item') }
+		{
+			label: 'Bold',
+			icon: 'B',
+			run: () => applyInlineMarkdown('**', '**', 'bold text')
+		},
+		{
+			label: 'Italic',
+			icon: 'I',
+			run: () => applyInlineMarkdown('*', '*', 'italic text')
+		},
+		{
+			label: 'Link',
+			icon: '↗',
+			run: () => applyInlineMarkdown('[', '](https://example.com)', 'link text')
+		},
+		{
+			label: 'Code',
+			icon: '</>',
+			run: () => applyInlineMarkdown('`', '`', 'code')
+		},
+		{ label: 'H1', icon: 'H1', run: () => applyBlockMarkdown('# ', 'Heading') },
+		{ label: 'H2', icon: 'H2', run: () => applyBlockMarkdown('## ', 'Heading') },
+		{ label: 'Quote', icon: '❝', run: () => applyBlockMarkdown('> ', 'Quote') },
+		{ label: 'List', icon: '•', run: () => applyBlockMarkdown('- ', 'List item') }
 	];
 
 	function handlePublish() {
@@ -204,10 +220,13 @@
 					<button
 						type="button"
 						class="markdown-button"
+						aria-label={action.label}
+						title={action.label}
 						onmousedown={(e) => e.preventDefault()}
 						onclick={action.run}
 					>
-						{action.label}
+						<span class="markdown-icon" aria-hidden="true">{action.icon}</span>
+						<span class="markdown-label">{action.label}</span>
 					</button>
 				{/each}
 			</div>
@@ -290,6 +309,15 @@
 		font-size: 0.75rem;
 		padding: 2px 8px;
 	}
+	.markdown-icon {
+		display: none;
+		font-size: 0.9rem;
+		line-height: 1;
+		font-weight: 700;
+	}
+	.markdown-label {
+		display: inline;
+	}
 	.content-input {
 		flex: 1;
 		border: none;
@@ -367,7 +395,15 @@
 			padding: var(--space-xs);
 		}
 		.markdown-button {
-			flex: 1 1 calc(50% - var(--space-xs));
+			flex: 1 1 calc(25% - var(--space-xs));
+			justify-content: center;
+			padding-inline: 0;
+		}
+		.markdown-icon {
+			display: inline;
+		}
+		.markdown-label {
+			display: none;
 		}
 		.title-input {
 			font-size: 1.25rem;

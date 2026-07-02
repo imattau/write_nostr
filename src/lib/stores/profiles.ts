@@ -10,25 +10,50 @@ const cache = writable<Map<string, NostrProfile | null>>(new Map());
 // Track in-flight requests to avoid duplicate fetches
 const pending = new Set<string>();
 
-/**
- * Request profiles for the given pubkeys.
- * Strategy:
- *   1. Return from in-memory store immediately if available.
- *   2. Check IndexedDB for fresh cached profiles.
- *   3. Fetch missing ones from relays and persist to IndexedDB.
- *
- * The `cache` store updates reactively when results arrive.
- */
-export async function requestProfiles(pubkeys: string[]): Promise<void> {
-	const current = get(cache);
-	const needFetch = pubkeys.filter((pk) => !current.has(pk) && !pending.has(pk));
-	if (needFetch.length === 0) return;
+// Batch profile requests that arrive during the same event loop turn.
+const queued = new Set<string>();
+let flushTimer: ReturnType<typeof setTimeout> | null = null;
+let flushPromise: Promise<void> | null = null;
+let flushPromiseResolve: (() => void) | null = null;
 
-	for (const pk of needFetch) pending.add(pk);
+function scheduleFlush(): Promise<void> {
+	if (flushTimer === null) {
+		if (!flushPromise) {
+			flushPromise = new Promise<void>((resolve) => {
+				flushPromiseResolve = resolve;
+			});
+		}
+		flushTimer = setTimeout(() => {
+			flushTimer = null;
+			void flushQueuedProfiles();
+		}, 0);
+	}
+
+	return flushPromise ?? Promise.resolve();
+}
+
+function finishFlushPromise() {
+	if (flushPromiseResolve) {
+		flushPromiseResolve();
+		flushPromiseResolve = null;
+	}
+	flushPromise = null;
+}
+
+async function flushQueuedProfiles(): Promise<void> {
+	if (queued.size === 0) {
+		finishFlushPromise();
+		return;
+	}
+
+	const batch = [...queued];
+	queued.clear();
+
+	for (const pk of batch) pending.add(pk);
 
 	try {
 		// 1. Check IndexedDB first
-		const dbProfiles = await getProfiles(needFetch);
+		const dbProfiles = await getProfiles(batch);
 		if (dbProfiles.size > 0) {
 			cache.update((map) => {
 				for (const [pk, profile] of dbProfiles) {
@@ -40,11 +65,11 @@ export async function requestProfiles(pubkeys: string[]): Promise<void> {
 		}
 
 		// 2. Determine which pubkeys still need relay fetch
-		const stillMissing = needFetch.filter((pk) => !dbProfiles.has(pk));
+		const stillMissing = batch.filter((pk) => !dbProfiles.has(pk));
 		if (stillMissing.length === 0) return;
 
-		// 3. Skip relay fetch if no relays are configured yet — release pending
-		//    locks so the next requestProfiles call can retry once relays load.
+		// 3. Skip relay fetch if no relays are configured yet. The queued request
+		//    remains unresolved in memory so a later call can retry cleanly.
 		const relayList = get(relays);
 		if (relayList.length === 0) return;
 
@@ -62,8 +87,36 @@ export async function requestProfiles(pubkeys: string[]): Promise<void> {
 			return map;
 		});
 	} finally {
-		for (const pk of needFetch) pending.delete(pk);
+		for (const pk of batch) pending.delete(pk);
+		if (queued.size > 0) {
+			// New requests arrived while this batch was running. Flush them next.
+			void flushQueuedProfiles();
+			return;
+		}
+		finishFlushPromise();
 	}
+}
+
+/**
+ * Request profiles for the given pubkeys.
+ * Strategy:
+ *   1. Return from in-memory store immediately if available.
+ *   2. Check IndexedDB for fresh cached profiles.
+ *   3. Fetch missing ones from relays and persist to IndexedDB.
+ *
+ * The `cache` store updates reactively when results arrive.
+ */
+export async function requestProfiles(pubkeys: string[]): Promise<void> {
+	const current = get(cache);
+	let scheduled = false;
+	for (const pk of pubkeys) {
+		if (current.has(pk) || pending.has(pk) || queued.has(pk)) continue;
+		queued.add(pk);
+		scheduled = true;
+	}
+
+	if (!scheduled) return;
+	return scheduleFlush();
 }
 
 /**
