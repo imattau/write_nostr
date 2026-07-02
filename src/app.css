@@ -1,0 +1,131 @@
+:root {
+	--font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+	--font-serif: Georgia, 'Times New Roman', serif;
+	--font-mono: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace;
+
+	--c-bg: #fafafa;
+	--c-surface: #ffffff;
+	--c-border: #e5e5e5;
+	--c-text: #1a1a1a;
+	--c-text-secondary: #6b6b6b;
+	--c-accent: #2563eb;
+	--c-accent-hover: #1d4ed8;
+	--c-danger: #dc2626;
+
+	--measure: 680px;
+	--radius: 8px;
+	--space-xs: 4px;
+	--space-sm: 8px;
+	--space-md: 16px;
+	--space-lg: 24px;
+	--space-xl: 32px;
+	--space-2xl: 48px;
+}
+
+@media (prefers-color-scheme: dark) {
+	:root {
+		--c-bg: #0f0f0f;
+		--c-surface: #1a1a1a;
+		--c-border: #2a2a2a;
+		--c-text: #e5e5e5;
+		--c-text-secondary: #888888;
+		--c-accent: #3b82f6;
+		--c-accent-hover: #60a5fa;
+		--c-danger: #ef4444;
+	}
+}
+
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+	margin: 0;
+	padding: 0;
+}
+
+html {
+	font-family: var(--font-sans);
+	background: var(--c-bg);
+	color: var(--c-text);
+	line-height: 1.6;
+	-webkit-font-smoothing: antialiased;
+}
+
+body {
+	min-height: 100vh;
+}
+
+a {
+	color: var(--c-accent);
+	text-decoration: none;
+}
+a:hover {
+	color: var(--c-accent-hover);
+}
+
+button,
+.btn {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--space-sm);
+	padding: var(--space-sm) var(--space-md);
+	border: 1px solid var(--c-border);
+	border-radius: var(--radius);
+	background: var(--c-surface);
+	color: var(--c-text);
+	font-family: var(--font-sans);
+	font-size: 0.875rem;
+	cursor: pointer;
+	transition: background 0.15s, border-color 0.15s;
+}
+button:hover,
+.btn:hover {
+	background: var(--c-bg);
+	border-color: var(--c-accent);
+}
+button:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+
+button.primary,
+.btn.primary {
+	background: var(--c-accent);
+	color: #fff;
+	border-color: var(--c-accent);
+}
+button.primary:hover,
+.btn.primary:hover {
+	background: var(--c-accent-hover);
+	border-color: var(--c-accent-hover);
+}
+
+input[type='text'],
+input[type='url'],
+textarea {
+	width: 100%;
+	padding: var(--space-sm) var(--space-md);
+	border: 1px solid var(--c-border);
+	border-radius: var(--radius);
+	background: var(--c-surface);
+	color: var(--c-text);
+	font-family: var(--font-sans);
+	font-size: 0.875rem;
+	outline: none;
+	transition: border-color 0.15s;
+}
+input:focus,
+textarea:focus {
+	border-color: var(--c-accent);
+}
+
+textarea {
+	resize: vertical;
+	font-family: var(--font-mono);
+}
+
+.container {
+	max-width: var(--measure);
+	margin: 0 auto;
+	padding: 0 var(--space-md);
+}
