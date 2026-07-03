@@ -47,12 +47,13 @@ jobs:
           sed -i "s/^version = \".*\"/version = \"$VERSION\"/" src-tauri/Cargo.toml
 
       - name: Import signing key
-        if: ${{ secrets.SIGNING_KEY != '' }}
         env:
           SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
         run: |
-          echo "$SIGNING_KEY" | gpg --batch --import
-          echo "KEY_IMPORTED=true" >> $GITHUB_ENV
+          if [ -n "$SIGNING_KEY" ]; then
+            echo "$SIGNING_KEY" | gpg --batch --import
+            echo "KEY_IMPORTED=true" >> $GITHUB_ENV
+          fi
 
       - name: Build deb + AppImage
         run: npm run tauri build -- --bundles deb,appimage
@@ -135,22 +136,22 @@ jobs:
             build-aux/signing-key.pub
           generate_release_notes: true
 
-  flathub-pr:
-    if: ${{ secrets.FLATHUB_PAT != '' }}
-    needs: build-linux
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          repository: flathub/com.writenostr.desktop
-          token: ${{ secrets.FLATHUB_PAT }}
-
-      - name: Update Flatpak manifest
+      - name: Flathub PR
         env:
-          VERSION: ${{ needs.build-linux.outputs.version }}
+          FLATHUB_PAT: ${{ secrets.FLATHUB_PAT }}
         run: |
+          if [ -z "$FLATHUB_PAT" ]; then
+            echo "FLATHUB_PAT not set — skipping Flathub PR"
+            exit 0
+          fi
+
+          REPO="flathub/com.writenostr.desktop"
+          VERSION="${{ env.VERSION }}"
+          BRANCH="update-v${VERSION}"
+
+          git clone "https://x-access-token:${FLATHUB_PAT}@github.com/${REPO}.git" /tmp/flathub-repo
+          cd /tmp/flathub-repo
+
           ARCHIVE_URL="https://github.com/imattau/write_nostr/archive/refs/tags/v${VERSION}.tar.gz"
           SHA256=$(curl -sL "$ARCHIVE_URL" | sha256sum | cut -d' ' -f1)
 
@@ -158,18 +159,21 @@ jobs:
             const fs = require('fs');
             let yml = fs.readFileSync('com.writenostr.desktop.yml', 'utf8');
             yml = yml.replace(/version: '.*?'/, \"version: '$VERSION'\");
-            yml = yml.replace(/url: .*write_nostr\/archive.*/, \"url: $ARCHIVE_URL\");
+            yml = yml.replace(/url: .*write_nostr\\/archive.*/, \"url: $ARCHIVE_URL\");
             yml = yml.replace(/sha256: .*/, \"sha256: $SHA256\");
             fs.writeFileSync('com.writenostr.desktop.yml', yml);
           "
 
-      - name: Create PR
-        uses: peter-evans/create-pull-request@v7
-        with:
-          token: ${{ secrets.FLATHUB_PAT }}
-          commit-message: "Update to v${{ needs.build-linux.outputs.version }}"
-          title: "Update to v${{ needs.build-linux.outputs.version }}"
-          body: |
-            Automated update for [v${{ needs.build-linux.outputs.version }}](https://github.com/imattau/write_nostr/releases/tag/v${{ needs.build-linux.outputs.version }}).
-          branch: update-v${{ needs.build-linux.outputs.version }}
-          base: master
+          git config user.name "write_nostr Release Bot"
+          git config user.email "lostcause@3nostr.com"
+          git checkout -b "$BRANCH"
+          git add -A
+          git diff --quiet && git diff --staged --quiet && echo "No changes — skipping PR" && exit 0
+          git commit -m "Update to v${VERSION}"
+          git push origin "$BRANCH"
+
+          curl -s -X POST \
+            -H "Authorization: token ${FLATHUB_PAT}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/${REPO}/pulls" \
+            -d "{\"title\":\"Update to v${VERSION}\",\"head\":\"${BRANCH}\",\"base\":\"master\",\"body\":\"Automated update for [v${VERSION}](https://github.com/imattau/write_nostr/releases/tag/v${VERSION}).\"}"
