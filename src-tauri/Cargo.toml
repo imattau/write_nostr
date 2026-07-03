@@ -1,6 +1,6 @@
 [package]
 name = "write-nostr"
-version = "0.1.1"
+version = "0.1.2"
 description = "A minimalist writing space on Nostr"
 authors = ["write_nostr <lostcause@3nostr.com>"]
 edition = "2021"
