@@ -73,7 +73,7 @@ jobs:
         if: env.KEY_IMPORTED == 'true'
         run: |
           for deb in src-tauri/target/release/bundle/deb/*.deb; do
-            debsigs --sign=builder --gpg-args="--batch --pinentry-mode loopback" "$deb"
+            debsigs --sign=builder "$deb"
           done
 
       - name: Sign AppImage
