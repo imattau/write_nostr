@@ -28,6 +28,7 @@ build-aux/signing-key.asc
 # Flatpak
 flatpak-repo/
 build-aux/flatpak/build-dir/
+.flatpak-builder/
 
 # Vite
 vite.config.js.timestamp-*
