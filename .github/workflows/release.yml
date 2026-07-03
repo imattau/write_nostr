@@ -1,0 +1,175 @@
+name: Release
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+
+      - name: Install system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev \
+            libssl-dev libsoup-3.0-dev libjavascriptcoregtk-4.1-dev \
+            flatpak flatpak-builder dpkg-sig
+
+      - name: Derive version from tag
+        id: version
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Write version to configs
+        run: |
+          VERSION="${{ env.VERSION }}"
+          node -e "
+            const fs = require('fs');
+            const cfg = JSON.parse(fs.readFileSync('src-tauri/tauri.conf.json','utf8'));
+            cfg.version = process.env.VERSION;
+            fs.writeFileSync('src-tauri/tauri.conf.json', JSON.stringify(cfg, null, 2)+'\n');
+          "
+          sed -i "s/^version = \".*\"/version = \"$VERSION\"/" src-tauri/Cargo.toml
+
+      - name: Import signing key
+        if: ${{ secrets.SIGNING_KEY != '' }}
+        env:
+          SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
+        run: |
+          echo "$SIGNING_KEY" | gpg --batch --import
+          echo "KEY_IMPORTED=true" >> $GITHUB_ENV
+
+      - name: Build deb + AppImage
+        run: npm run tauri build -- --bundles deb,appimage
+
+      - name: Sign deb packages
+        if: env.KEY_IMPORTED == 'true'
+        run: |
+          for deb in src-tauri/target/release/bundle/deb/*.deb; do
+            dpkg-sig --sign builder "$deb"
+          done
+
+      - name: Sign AppImage
+        if: env.KEY_IMPORTED == 'true'
+        run: |
+          for app in src-tauri/target/release/bundle/appimage/*.AppImage; do
+            gpg --detach-sign --armor "$app"
+          done
+
+      - name: Set up Flathub remote
+        run: |
+          flatpak remote-add --user --if-not-exists flathub \
+            https://dl.flathub.org/repo/flathub.flatpakrepo
+
+      - name: Install GNOME runtime
+        run: |
+          flatpak install --user -y --noninteractive \
+            org.gnome.Platform//47 org.gnome.Sdk//47 2>&1 | tail -5 || true
+
+      - name: Build Flatpak
+        run: |
+          flatpak-builder --force-clean --user \
+            --repo=flatpak-repo \
+            build-aux/flatpak/build-dir \
+            build-aux/flatpak/com.writenostr.desktop.yml
+
+      - name: Bundle Flatpak
+        if: env.KEY_IMPORTED == 'true'
+        run: |
+          KEY_ID=$(gpg --list-keys --with-colons lostcause@3nostr.com | awk -F: '/^fpr:/{print $10; exit}')
+          flatpak build-bundle \
+            --gpg-sign="$KEY_ID" \
+            flatpak-repo \
+            write-nostr.flatpak \
+            com.writenostr.desktop
+
+      - name: Bundle Flatpak (unsigned)
+        if: env.KEY_IMPORTED != 'true'
+        run: |
+          flatpak build-bundle \
+            flatpak-repo \
+            write-nostr.flatpak \
+            com.writenostr.desktop
+
+      - name: Export public key
+        if: env.KEY_IMPORTED == 'true'
+        run: |
+          gpg --armor --export lostcause@3nostr.com > build-aux/signing-key.pub
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: write-nostr-linux
+          path: |
+            src-tauri/target/release/bundle/deb/*.deb
+            src-tauri/target/release/bundle/deb/*.deb.asc
+            src-tauri/target/release/bundle/appimage/*.AppImage
+            src-tauri/target/release/bundle/appimage/*.AppImage.asc
+            write-nostr.flatpak
+            build-aux/signing-key.pub
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            src-tauri/target/release/bundle/deb/*.deb
+            src-tauri/target/release/bundle/deb/*.deb.asc
+            src-tauri/target/release/bundle/appimage/*.AppImage
+            src-tauri/target/release/bundle/appimage/*.AppImage.asc
+            write-nostr.flatpak
+            build-aux/signing-key.pub
+          generate_release_notes: true
+
+  flathub-pr:
+    if: ${{ secrets.FLATHUB_PAT != '' }}
+    needs: build-linux
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: flathub/com.writenostr.desktop
+          token: ${{ secrets.FLATHUB_PAT }}
+
+      - name: Update Flatpak manifest
+        env:
+          VERSION: ${{ needs.build-linux.outputs.version }}
+        run: |
+          ARCHIVE_URL="https://github.com/imattau/write_nostr/archive/refs/tags/v${VERSION}.tar.gz"
+          SHA256=$(curl -sL "$ARCHIVE_URL" | sha256sum | cut -d' ' -f1)
+
+          node -e "
+            const fs = require('fs');
+            let yml = fs.readFileSync('com.writenostr.desktop.yml', 'utf8');
+            yml = yml.replace(/version: '.*?'/, \"version: '$VERSION'\");
+            yml = yml.replace(/url: .*write_nostr\/archive.*/, \"url: $ARCHIVE_URL\");
+            yml = yml.replace(/sha256: .*/, \"sha256: $SHA256\");
+            fs.writeFileSync('com.writenostr.desktop.yml', yml);
+          "
+
+      - name: Create PR
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.FLATHUB_PAT }}
+          commit-message: "Update to v${{ needs.build-linux.outputs.version }}"
+          title: "Update to v${{ needs.build-linux.outputs.version }}"
+          body: |
+            Automated update for [v${{ needs.build-linux.outputs.version }}](https://github.com/imattau/write_nostr/releases/tag/v${{ needs.build-linux.outputs.version }}).
+          branch: update-v${{ needs.build-linux.outputs.version }}
+          base: master

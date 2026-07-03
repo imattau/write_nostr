@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=write_nostr
+Comment=A minimalist writing space on Nostr
+Exec=write-nostr
+Icon=com.writenostr.desktop
+Type=Application
+Categories=Utility;
+Terminal=false

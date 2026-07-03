@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.writenostr.desktop</id>
+  <name>write_nostr</name>
+  <summary>A minimalist writing space on Nostr</summary>
+  <developer id="com.writenostr">
+    <name>write_nostr</name>
+  </developer>
+  <url type="homepage">https://github.com/imattau/write_nostr</url>
+  <url type="vcs-browser">https://github.com/imattau/write_nostr</url>
+  <project_license>MIT</project_license>
+  <description>
+    <p>write_nostr is a desktop app for composing, publishing, and managing NIP-23 long-form content on the Nostr protocol. It provides a distraction-free Markdown editor with live preview, metadata management, and direct publishing to Nostr relays.</p>
+  </description>
+  <launchable type="desktop-id">com.writenostr.desktop.desktop</launchable>
+  <screenshots>
+    <screenshot type="default">
+      <caption>Main editor view</caption>
+    </screenshot>
+  </screenshots>
+  <releases>
+    <release version="0.1.0" date="2025-01-01"/>
+  </releases>
+  <content_rating type="oars-1.1"/>
+</component>

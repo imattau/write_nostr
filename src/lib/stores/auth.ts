@@ -1,8 +1,10 @@
 import { writable, derived } from 'svelte/store';
 import type { NostrEvent } from 'nostr-tools';
+import { getKeychain, storeKeychain, clearKeychain } from '$lib/tauri';
+import { isTauri } from '$lib/utils/env';
 
 export type Signer = {
-	type: 'extension' | 'nsec' | 'passkey';
+	type: 'extension' | 'nsec' | 'passkey' | 'keychain';
 	pubkey: string;
 	sign: (event: NostrEvent) => Promise<NostrEvent>;
 };
@@ -116,7 +118,26 @@ function createAuthStore() {
 		return signer;
 	}
 
+	async function loginWithKeychain(): Promise<Signer | null> {
+		const nsec = await getKeychain();
+		if (!nsec) return null;
+		try {
+			return await loginWithNsec(nsec);
+		} catch {
+			await clearKeychain();
+			return null;
+		}
+	}
+
+	async function storeKeychainLogin(nsec: string): Promise<void> {
+		await storeKeychain(nsec);
+	}
+
 	async function init() {
+		if (isTauri()) {
+			const keychainSigner = await loginWithKeychain();
+			if (keychainSigner) return;
+		}
 		const ext = await detectExtension();
 		if (ext) {
 			return;
@@ -142,6 +163,8 @@ function createAuthStore() {
 		subscribe: store.subscribe,
 		init,
 		loginWithNsec,
+		loginWithKeychain,
+		storeKeychainLogin,
 		detectExtension,
 		loginWithPasskey,
 		importPasskeyFromNsec,

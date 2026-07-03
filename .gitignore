@@ -18,6 +18,17 @@ Thumbs.db
 !.env.example
 !.env.test
 
+# Tauri
+src-tauri/target/
+src-tauri/gen/
+
+# Signing key (private)
+build-aux/signing-key.asc
+
+# Flatpak
+flatpak-repo/
+build-aux/flatpak/build-dir/
+
 # Vite
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*

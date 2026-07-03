@@ -1,16 +1,23 @@
 <script lang="ts">
 	import { auth, isAuthenticated } from '$lib/stores/auth';
+	import { isTauri } from '$lib/utils/env';
 	let { children } = $props();
 
 	let nsecInput = $state('');
 	let loading = $state(false);
 	let error = $state('');
+	let rememberKeychain = $state(false);
+
+	const runningInTauri = isTauri();
 
 	async function handleLogin() {
 		loading = true;
 		error = '';
 		try {
 			await auth.loginWithNsec(nsecInput.trim());
+			if (rememberKeychain) {
+				await auth.storeKeychainLogin(nsecInput.trim());
+			}
 		} catch (e) {
 			error = 'Invalid nsec key. Please check and try again.';
 		}
@@ -61,20 +68,22 @@
 			<h1>write_nostr</h1>
 			<p class="subtitle">A minimalist writing space on Nostr</p>
 
-			<button class="primary" onclick={handleExtension} disabled={loading}>
-				{loading ? 'Connecting...' : 'Connect with Browser Extension'}
-			</button>
+			{#if !runningInTauri}
+				<button class="primary" onclick={handleExtension} disabled={loading}>
+					{loading ? 'Connecting...' : 'Connect with Browser Extension'}
+				</button>
 
-			<button onclick={handlePasskey} disabled={loading}>
-				{loading ? 'Unlocking...' : 'Login with Passkey'}
-			</button>
+				<button onclick={handlePasskey} disabled={loading}>
+					{loading ? 'Unlocking...' : 'Login with Passkey'}
+				</button>
 
-			<p class="hint">
-				Passkey login uses a device-bound credential. If you have an `nsec`, you can import it
-				into a passkey below once, then use biometrics or device PIN next time.
-			</p>
+				<p class="hint">
+					Passkey login uses a device-bound credential. If you have an `nsec`, you can import it
+					into a passkey below once, then use biometrics or device PIN next time.
+				</p>
 
-			<div class="divider"><span>or</span></div>
+				<div class="divider"><span>or</span></div>
+			{/if}
 
 			<form onsubmit={(e) => { e.preventDefault(); handleLogin(); }}>
 				<input
@@ -88,19 +97,29 @@
 				<button class="primary" type="submit" disabled={loading || !nsecInput.trim()}>
 					Login with nsec
 				</button>
-				<button type="button" onclick={handleImportPasskey} disabled={loading || !nsecInput.trim()}>
-					Create passkey from nsec
-				</button>
+				{#if runningInTauri}
+					<label class="checkbox-label">
+						<input type="checkbox" bind:checked={rememberKeychain} />
+						Remember in system keychain
+					</label>
+				{/if}
+				{#if !runningInTauri}
+					<button type="button" onclick={handleImportPasskey} disabled={loading || !nsecInput.trim()}>
+						Create passkey from nsec
+					</button>
+				{/if}
 			</form>
 
 			{#if error}
 				<p class="error">{error}</p>
 			{/if}
 
-			<p class="hint">
-				Your private key never leaves your browser.
-				Use a <a href="https://chromewebstore.google.com/detail/nos2x/kpgefcfmnafjgpblomihpgmejjdanjjp" target="_blank">NIP-07 extension</a> for maximum security.
-			</p>
+			{#if !runningInTauri}
+				<p class="hint">
+					Your private key never leaves your browser.
+					Use a <a href="https://chromewebstore.google.com/detail/nos2x/kpgefcfmnafjgpblomihpgmejjdanjjp" target="_blank">NIP-07 extension</a> for maximum security.
+				</p>
+			{/if}
 		</div>
 	</div>
 {:else}
@@ -163,6 +182,17 @@
 	button {
 		width: 100%;
 		justify-content: center;
+	}
+	.checkbox-label {
+		display: flex;
+		align-items: center;
+		gap: var(--space-xs);
+		font-size: 0.8125rem;
+		color: var(--c-text-secondary);
+		cursor: pointer;
+	}
+	.checkbox-label input {
+		width: auto;
 	}
 
 	@media (max-width: 640px) {

@@ -1,0 +1,30 @@
+id: com.writenostr.desktop
+runtime: org.gnome.Platform
+runtime-version: '47'
+sdk: org.gnome.Sdk
+command: write-nostr
+finish-args:
+  - --socket=wayland
+  - --socket=x11
+  - --share=ipc
+  - --share=network
+  - --device=dri
+  - --socket=session-bus
+  - --filesystem=home
+modules:
+  - name: write-nostr
+    buildsystem: simple
+    build-commands:
+      - install -Dm755 write-nostr /app/bin/write-nostr
+      - install -Dm644 icon.png /app/share/icons/hicolor/256x256/apps/com.writenostr.desktop.png
+      - install -Dm644 com.writenostr.desktop.desktop /app/share/applications/com.writenostr.desktop.desktop
+      - install -Dm644 com.writenostr.desktop.metainfo.xml /app/share/metainfo/com.writenostr.desktop.metainfo.xml
+    sources:
+      - type: file
+        path: ../../src-tauri/target/release/write-nostr
+        dest-filename: write-nostr
+      - type: file
+        path: ../../src-tauri/icons/icon.png
+        dest-filename: icon.png
+      - type: dir
+        path: .
