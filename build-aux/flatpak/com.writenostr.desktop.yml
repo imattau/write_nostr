@@ -11,6 +11,15 @@ finish-args:
   - --device=dri
   - --socket=session-bus
   - --filesystem=home
+cleanup:
+  - /include
+  - /lib/pkgconfig
+  - /share/pkgconfig
+  - /share/aclocal
+  - /man
+  - /share/man
+  - /share/gtk-doc
+  - /share/info
 modules:
   - name: write-nostr
     buildsystem: simple
