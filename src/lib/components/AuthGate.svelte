@@ -15,11 +15,17 @@
 		error = '';
 		try {
 			await auth.loginWithNsec(nsecInput.trim());
-			if (rememberKeychain) {
-				await auth.storeKeychainLogin(nsecInput.trim());
-			}
 		} catch (e) {
 			error = 'Invalid nsec key. Please check and try again.';
+			loading = false;
+			return;
+		}
+		if (rememberKeychain) {
+			try {
+				await auth.storeKeychainLogin(nsecInput.trim());
+			} catch (e) {
+				console.warn('[auth] failed to store in system keychain:', e);
+			}
 		}
 		loading = false;
 	}

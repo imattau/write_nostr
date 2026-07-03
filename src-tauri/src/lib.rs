@@ -1,28 +1,46 @@
+use std::fs;
+use std::path::PathBuf;
+use tauri::Manager;
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_notification::NotificationExt;
 
-// ── Keychain ──
+// ── Keychain (file-based, stored in app data directory) ──
 
-#[tauri::command]
-fn store_keychain(key: String) -> Result<(), String> {
-    let entry = keyring::Entry::new("write_nostr", "nsec").map_err(|e| e.to_string())?;
-    entry.set_password(&key).map_err(|e| e.to_string())
+fn keychain_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let mut path = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    path.push("keychain.json");
+    Ok(path)
+}
+
+fn keychain_path_from_env(app: &tauri::AppHandle) -> PathBuf {
+    keychain_path(app).unwrap_or_else(|_| PathBuf::from("keychain.json"))
 }
 
 #[tauri::command]
-fn get_keychain() -> Result<Option<String>, String> {
-    let entry = keyring::Entry::new("write_nostr", "nsec").map_err(|e| e.to_string())?;
-    match entry.get_password() {
-        Ok(key) => Ok(Some(key)),
-        Err(keyring::Error::NoEntry) => Ok(None),
-        Err(e) => Err(e.to_string()),
+fn store_keychain(app: tauri::AppHandle, key: String) -> Result<(), String> {
+    let path = keychain_path(&app)?;
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
+    let data = serde_json::json!({ "nsec": key });
+    fs::write(&path, serde_json::to_string(&data).unwrap()).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-fn clear_keychain() -> Result<(), String> {
-    let entry = keyring::Entry::new("write_nostr", "nsec").map_err(|e| e.to_string())?;
-    entry.delete_credential().map_err(|e| e.to_string())
+fn get_keychain(app: tauri::AppHandle) -> Option<String> {
+    let path = keychain_path_from_env(&app);
+    let contents = fs::read_to_string(path).ok()?;
+    let data: serde_json::Value = serde_json::from_str(&contents).ok()?;
+    data.get("nsec")?.as_str().map(|s| s.to_string())
+}
+
+#[tauri::command]
+fn clear_keychain(app: tauri::AppHandle) -> Result<(), String> {
+    let path = keychain_path(&app)?;
+    if path.exists() {
+        fs::remove_file(&path).map_err(|e| e.to_string())?;
+    }
+    Ok(())
 }
 
 // ── File export ──
