@@ -138,7 +138,7 @@
 		</div>
 		<div class="meta">
 			<span class="author" title={event.pubkey}>
-				{displayName(event.pubkey, $profileCache)}
+				{displayName(event.pubkey, profileMap)}
 			</span>
 			<span class="date">{formatDate(getPublishedAt())}</span>
 			<InteractionButtons {event} />

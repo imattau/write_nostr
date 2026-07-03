@@ -115,8 +115,8 @@
 				const [name, domain] = profile.lud16.split('@');
 				lnurlUrl = `https://${domain}/.well-known/lnurlp/${name}`;
 			} else {
-				const { bech32 } = await import('nostr-tools');
-				const decoded = bech32.decode(profile.lud06!, 1000);
+				const { bech32 } = await import('@scure/base');
+				const decoded = bech32.decode(profile.lud06! as `${string}1${string}`, 2000);
 				const data = bech32.fromWords(decoded.words);
 				lnurlUrl = new TextDecoder().decode(data);
 			}

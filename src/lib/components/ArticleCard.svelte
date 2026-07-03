@@ -22,11 +22,11 @@
 		onTagClick?: (tag: string) => void;
 	} = $props();
 
-	// Request profile for author whenever the event or relay list changes.
-	// Tracking $relays ensures a retry when relays become available after a
-	// fast cache-hit render (which is the root cause of missing names on
-	// My Circle — articles load from IndexedDB before relays are ready).
+	// Request profile for author whenever the event, relay list, or profile
+	// cache changes. Retries on profile-fetch failures when other profiles
+	// arrive (which triggers this effect via $profileCache).
 	$effect(() => {
+		$profileCache;
 		if (event?.pubkey && $relays.length > 0) requestProfiles([event.pubkey]);
 	});
 
@@ -68,6 +68,7 @@
 
 	const MAX_TAGS = 3;
 	let naddr = $derived(encodeNaddr(event.pubkey, getIdentifier(), relaysProp));
+	let authorName = $derived(displayName(event.pubkey, $profileCache));
 	let visibleTags = $derived(getTags().slice(0, MAX_TAGS));
 	let hiddenTagCount = $derived(Math.max(0, getTags().length - MAX_TAGS));
 
@@ -113,7 +114,7 @@
 		<p class="summary">{getSummary()}</p>
 	{/if}
 	<div class="meta">
-		<span class="author" title={event.pubkey}>{displayName(event.pubkey, $profileCache)}</span>
+		<span class="author" title={event.pubkey}>{authorName}</span>
 
 		{#if showSocialActions}
 			<!-- Follow button -->
