@@ -74,14 +74,14 @@ jobs:
         if: env.KEY_IMPORTED == 'true'
         run: |
           for deb in src-tauri/target/release/bundle/deb/*.deb; do
-            gpg --detach-sign --armor "$deb"
+            gpg --batch --passphrase '' --detach-sign --armor "$deb"
           done
 
       - name: Sign AppImage
         if: env.KEY_IMPORTED == 'true'
         run: |
           for app in src-tauri/target/release/bundle/appimage/*.AppImage; do
-            gpg --batch --pinentry-mode loopback --detach-sign --armor "$app"
+            gpg --batch --passphrase '' --pinentry-mode loopback --detach-sign --armor "$app"
           done
 
       - name: Set up Flathub remote
@@ -104,7 +104,7 @@ jobs:
       - name: Bundle Flatpak
         if: env.KEY_IMPORTED == 'true'
         run: |
-          KEY_ID=$(gpg --batch --list-keys --with-colons lostcause@3nostr.com | awk -F: '/^fpr:/{print $10; exit}')
+          KEY_ID=$(gpg --batch --no-tty --list-keys --with-colons lostcause@3nostr.com | awk -F: '/^fpr:/{print $10; exit}')
           flatpak build-bundle \
             --gpg-sign="$KEY_ID" \
             flatpak-repo \
@@ -122,7 +122,7 @@ jobs:
       - name: Export public key
         if: env.KEY_IMPORTED == 'true'
         run: |
-          gpg --armor --export lostcause@3nostr.com > build-aux/signing-key.pub
+          gpg --batch --no-tty --armor --export lostcause@3nostr.com > build-aux/signing-key.pub
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
