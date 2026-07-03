@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <component type="desktop-application">
   <id>com.writenostr.desktop</id>
+  <metadata_license>CC0-1.0</metadata_license>
   <name>write_nostr</name>
   <summary>A minimalist writing space on Nostr</summary>
   <developer id="com.writenostr">
@@ -16,6 +17,7 @@
   <screenshots>
     <screenshot type="default">
       <caption>Main editor view</caption>
+      <image>https://raw.githubusercontent.com/imattau/write_nostr/main/static/brand/pen-logo-flat.png</image>
     </screenshot>
   </screenshots>
   <releases>

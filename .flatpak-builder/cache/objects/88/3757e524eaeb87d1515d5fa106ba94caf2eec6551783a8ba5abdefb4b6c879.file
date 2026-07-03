@@ -1,0 +1,19 @@
+[Application]
+name=com.writenostr.desktop
+runtime=org.gnome.Platform/x86_64/47
+sdk=org.gnome.Sdk/x86_64/47
+command=write-nostr
+
+[Context]
+shared=network;ipc;
+sockets=x11;wayland;session-bus;
+devices=dri;
+filesystems=home;
+
+[Extension com.writenostr.desktop.Debug]
+directory=lib/debug
+autodelete=true
+no-autodownload=true
+
+[Build]
+built-extensions=com.writenostr.desktop.Debug;

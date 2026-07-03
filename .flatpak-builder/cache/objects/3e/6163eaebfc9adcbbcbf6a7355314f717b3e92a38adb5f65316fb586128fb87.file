@@ -1,0 +1,5 @@
+[Runtime]
+name=com.writenostr.desktop.Debug
+
+[ExtensionOf]
+ref=app/com.writenostr.desktop/x86_64/master
