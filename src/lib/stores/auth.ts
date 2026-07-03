@@ -119,12 +119,12 @@ function createAuthStore() {
 	}
 
 	async function loginWithKeychain(): Promise<Signer | null> {
-		const nsec = await getKeychain();
-		if (!nsec) return null;
 		try {
+			const nsec = await getKeychain();
+			if (!nsec) return null;
 			return await loginWithNsec(nsec);
 		} catch {
-			await clearKeychain();
+			await clearKeychain().catch(() => {});
 			return null;
 		}
 	}
@@ -134,21 +134,19 @@ function createAuthStore() {
 	}
 
 	async function init() {
-		if (isTauri()) {
-			const keychainSigner = await loginWithKeychain();
-			if (keychainSigner) return;
-		}
-		const ext = await detectExtension();
-		if (ext) {
-			return;
-		}
-		const stored = sessionStorage.getItem('nsec_encrypted');
-		if (stored) {
-			try {
-				await loginWithNsec(stored);
-			} catch {
-				sessionStorage.removeItem('nsec_encrypted');
+		try {
+			if (isTauri()) {
+				const keychainSigner = await loginWithKeychain();
+				if (keychainSigner) return;
 			}
+			const ext = await detectExtension();
+			if (ext) return;
+			const stored = sessionStorage.getItem('nsec_encrypted');
+			if (stored) {
+				await loginWithNsec(stored);
+			}
+		} catch (e) {
+			console.warn('[auth] init error:', e);
 		}
 	}
 

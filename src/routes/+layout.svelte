@@ -11,7 +11,7 @@
 	let { children } = $props();
 
 	onMount(() => {
-		auth.init();
+		auth.init().catch((e) => console.warn('[auth] init failed:', e));
 		// Clean up stale IndexedDB records in the background — non-blocking
 		pruneStaleCache().catch(() => {});
 
