@@ -84,7 +84,9 @@ function createAuthStore() {
 		setSigner(signer, () => {
 			sk.fill(0);
 		});
-		sessionStorage.setItem('nsec_encrypted', nsec);
+		// WARNING: The nsec is stored in plaintext. sessionStorage is cleared on tab close
+		// but is accessible to any JS running in the same origin (e.g. extensions, devtools).
+		sessionStorage.setItem('nsec_raw', nsec);
 		return signer;
 	}
 
@@ -100,7 +102,7 @@ function createAuthStore() {
 			rpName: 'write_nostr'
 		});
 		const shim = buildPasskeySignerShim(identity.secretKey);
-		sessionStorage.removeItem('nsec_encrypted');
+		sessionStorage.removeItem('nsec_raw');
 		const signer: Signer = {
 			type: 'passkey',
 			pubkey: identity.pubkey,
@@ -127,7 +129,7 @@ function createAuthStore() {
 			rpName: 'write_nostr'
 		});
 		const shim = buildPasskeySignerShim(identity.secretKey);
-		sessionStorage.removeItem('nsec_encrypted');
+		sessionStorage.removeItem('nsec_raw');
 		const signer: Signer = {
 			type: 'passkey',
 			pubkey: identity.pubkey,
@@ -165,7 +167,7 @@ function createAuthStore() {
 			}
 			const ext = await detectExtension();
 			if (ext) return;
-			const stored = sessionStorage.getItem('nsec_encrypted');
+			const stored = sessionStorage.getItem('nsec_raw');
 			if (stored) {
 				await loginWithNsec(stored);
 			}
@@ -177,7 +179,7 @@ function createAuthStore() {
 	function logout() {
 		cleanupSigner?.();
 		cleanupSigner = null;
-		sessionStorage.removeItem('nsec_encrypted');
+		sessionStorage.removeItem('nsec_raw');
 		store.set(null);
 	}
 

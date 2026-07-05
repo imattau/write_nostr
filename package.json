@@ -28,6 +28,8 @@
 		"vitest": "^4.1.9"
 	},
 	"dependencies": {
+		"@noble/hashes": "^1.8.0",
+		"@scure/base": "^1.2.5",
 		"@sveltejs/adapter-static": "^3.0.10",
 		"@tauri-apps/api": "^2.11.1",
 		"idb": "^8.0.3",

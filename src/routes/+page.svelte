@@ -70,19 +70,18 @@
 
 	/** Oldest timestamp among loaded articles — used as `until` cursor for pagination */
 	let oldestTimestamp = $derived(
-		articles.length > 0 ? Math.min(...articles.map((a) => a.created_at)) : undefined
+		articles.length > 0
+			? articles.reduce((min, a) => (a.created_at < min ? a.created_at : min), articles[0].created_at)
+			: undefined
 	);
 
 	/** Oldest timestamp among articles matching the active tag filter — used for tag-filtered pagination */
-	let oldestTaggedTimestamp = $derived(
-		tagFilter && articles.length > 0
-			? Math.min(
-					...articles
-						.filter((a) => a.tags.some(([k, v]) => k === 't' && v === tagFilter))
-						.map((a) => a.created_at)
-				)
-			: undefined
-	);
+	let oldestTaggedTimestamp = $derived.by(() => {
+		if (!tagFilter || articles.length === 0) return undefined;
+		const tagged = articles.filter((a) => a.tags.some(([k, v]) => k === 't' && v === tagFilter));
+		if (tagged.length === 0) return undefined;
+		return tagged.reduce((min, a) => (a.created_at < min ? a.created_at : min), tagged[0].created_at);
+	});
 
 	onMount(async () => {
 		await load('all');

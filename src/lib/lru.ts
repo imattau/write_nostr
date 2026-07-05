@@ -77,7 +77,13 @@ export class LRUMap<K, V> {
 	}
 
 	keys(): IterableIterator<K> {
-		return this.data.keys();
+		const result: K[] = [];
+		let curr = this.head;
+		while (curr !== null) {
+			result.push(curr);
+			curr = this.data.get(curr)!.next;
+		}
+		return result[Symbol.iterator]();
 	}
 
 	values(): IterableIterator<V> {

@@ -18,7 +18,8 @@ function storageKey(pubkey: string) {
 
 function createRelaysStore() {
 	// Bootstrap from localStorage (no pubkey yet → use the generic key or defaults)
-	const stored = localStorage.getItem('write_relays');
+	// SSR guard: localStorage is not available in Node.js (SvelteKit SSR)
+	const stored = typeof localStorage !== 'undefined' ? localStorage.getItem('write_relays') : null;
 	const initial: string[] = stored ? JSON.parse(stored) : DEFAULT_RELAYS;
 	const { subscribe, set, update } = writable<string[]>(initial);
 

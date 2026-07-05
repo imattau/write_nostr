@@ -12,7 +12,8 @@ export type PublishResult = {
 	error?: string;
 };
 
-function getRelayUrl(relays: string[]): string {
+/** Returns the first relay URL for use as an NIP-10 relay hint in event tags. */
+function getFirstRelayHint(relays: string[]): string {
 	return relays[0] || 'wss://relay.damus.io';
 }
 
@@ -55,7 +56,7 @@ export async function publishBoost(
 	signer: Signer,
 	relayUrls: string[]
 ): Promise<PublishResult> {
-	const relayUrl = getRelayUrl(relayUrls);
+	const relayUrl = getFirstRelayHint(relayUrls);
 
 	const event: NostrEvent = {
 		kind: 6,

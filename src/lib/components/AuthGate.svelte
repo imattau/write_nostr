@@ -121,10 +121,11 @@
 			{/if}
 
 			{#if !runningInTauri}
-				<p class="hint">
-					Your private key never leaves your browser.
-					Use a <a href="https://chromewebstore.google.com/detail/nos2x/kpgefcfmnafjgpblomihpgmejjdanjjp" target="_blank">NIP-07 extension</a> for maximum security.
-				</p>
+				<div class="security-warning">
+					<p class="hint">
+						⚠️ Logging in with an <strong>nsec</strong> key directly exposes it to the browser's session storage. For maximum security, use a <a href="https://chromewebstore.google.com/detail/nos2x/kpgefcfmnafjgpblomihpgmejjdanjjp" target="_blank">NIP-07 extension</a> or create a <strong>Passkey</strong>.
+					</p>
+				</div>
 			{/if}
 		</div>
 	</div>

@@ -89,7 +89,7 @@ async function getDB(): Promise<IDBPDatabase<NostrDBSchema>> {
 			if (!db.objectStoreNames.contains('events')) {
 				const evStore = db.createObjectStore('events', { keyPath: 'id' });
 				evStore.createIndex('byGroupKey', 'groupKey');
-				evStore.createIndex('byKind', ['event.kind'] as unknown as string);
+				evStore.createIndex('byKind', 'event.kind');
 			}
 			// Profiles store
 			if (!db.objectStoreNames.contains('profiles')) {

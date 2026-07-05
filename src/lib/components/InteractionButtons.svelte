@@ -158,7 +158,7 @@
 		try {
 			const signer = $auth;
 			const relayList = get(relays);
-			const sats = zapCustom ? parseInt(zapCustom) : zapAmount;
+			const sats = zapCustom ? parseInt(zapCustom, 10) : zapAmount;
 			const millisats = sats * 1000;
 			if (millisats < zapInfo.minSendable || millisats > zapInfo.maxSendable) {
 				zapError = `Amount must be between ${zapInfo.minSendable / 1000} and ${zapInfo.maxSendable / 1000} sats`;
