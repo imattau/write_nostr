@@ -3,22 +3,27 @@ import { SimplePool } from 'nostr-tools';
 import type { NostrEvent } from 'nostr-tools';
 import { auth } from '$lib/stores/auth';
 import { relays } from '$lib/stores/relays';
+import { loadList, saveList, type ListEntry } from '$lib/nostr/lists';
 
 // ── Internal state ─────────────────────────────────────────────────────────
 
 /** Pubkeys the current user follows (NIP-02 kind:3) */
 const followedPubkeys = writable<Set<string>>(new Set());
 
-/** Pubkeys the current user has muted/blocked (NIP-51 kind:10000) */
-const blockedPubkeys = writable<Set<string>>(new Set());
+/** NIP-51 mute-list entries (kind:10000), public + private, as loaded from relays */
+const blockedListEntries = writable<ListEntry[]>([]);
 
 let followEventTags: string[][] = []; // full tag list from last kind:3 event
-let blockEventTags: string[][] = [];  // full tag list from last kind:10000 event
 
 // ── Public derived stores ──────────────────────────────────────────────────
 
 export const follows = derived(followedPubkeys, ($f) => $f);
-export const blocks = derived(blockedPubkeys, ($b) => $b);
+
+/** All muted pubkeys (public + private) as a Set, for quick membership checks. */
+export const blocks = derived(blockedListEntries, ($entries) => new Set($entries.map((e) => e.tag[1])));
+
+/** Mute-list entries with their privacy flag, for list-management UI. */
+export const blockedEntries = derived(blockedListEntries, ($e) => $e);
 
 // ── Bootstrap: load lists from relays ─────────────────────────────────────
 
@@ -31,15 +36,13 @@ export async function loadSocialLists(): Promise<void> {
 
 	try {
 		const events = await pool.querySync(relayList, {
-			kinds: [3, 10000],
+			kinds: [3],
 			authors: [signer.pubkey],
-			limit: 2
+			limit: 1
 		});
 
 		// kind:3 – contact list (follows)
-		const followEvent = events
-			.filter((e) => e.kind === 3)
-			.sort((a, b) => b.created_at - a.created_at)[0];
+		const followEvent = events.sort((a, b) => b.created_at - a.created_at)[0];
 
 		if (followEvent) {
 			followEventTags = followEvent.tags;
@@ -49,23 +52,13 @@ export async function loadSocialLists(): Promise<void> {
 				)
 			);
 		}
-
-		// kind:10000 – mute/block list
-		const blockEvent = events
-			.filter((e) => e.kind === 10000)
-			.sort((a, b) => b.created_at - a.created_at)[0];
-
-		if (blockEvent) {
-			blockEventTags = blockEvent.tags;
-			blockedPubkeys.set(
-				new Set(
-					blockEvent.tags.filter(([k]) => k === 'p').map(([, pk]) => pk)
-				)
-			);
-		}
 	} finally {
 		pool.destroy();
 	}
+
+	// kind:10000 – mute/block list (public + private)
+	const entries = await loadList(signer, relayList, { kind: 10000 });
+	blockedListEntries.set(entries);
 }
 
 // ── Follow ─────────────────────────────────────────────────────────────────
@@ -90,7 +83,7 @@ export async function followUser(pubkey: string): Promise<void> {
 			];
 
 	followEventTags = newTags;
-	await publishList(3, newTags);
+	await publishFollowList(newTags);
 }
 
 export async function unfollowUser(pubkey: string): Promise<void> {
@@ -106,31 +99,25 @@ export async function unfollowUser(pubkey: string): Promise<void> {
 
 	const newTags = followEventTags.filter(([k, pk]) => !(k === 'p' && pk === pubkey));
 	followEventTags = newTags;
-	await publishList(3, newTags);
+	await publishFollowList(newTags);
 }
 
 // ── Block ──────────────────────────────────────────────────────────────────
 
-export async function blockUser(pubkey: string): Promise<void> {
+export async function blockUser(pubkey: string, opts: { private?: boolean } = {}): Promise<void> {
 	const signer = get(auth);
 	if (!signer) throw new Error('Not authenticated');
 
+	const isPrivate = opts.private ?? false;
+
 	// Optimistic update
-	blockedPubkeys.update((s) => new Set([...s, pubkey]));
+	blockedListEntries.update((entries) => {
+		if (entries.some((e) => e.tag[1] === pubkey)) return entries;
+		return [...entries, { tag: ['p', pubkey], private: isPrivate }];
+	});
 
-	const existingPTags = blockEventTags.filter(([k]) => k === 'p');
-	const alreadyPresent = existingPTags.some(([, pk]) => pk === pubkey);
-	const newPTag: string[] = ['p', pubkey];
-	const newTags = alreadyPresent
-		? blockEventTags
-		: [
-				...blockEventTags.filter(([k]) => k !== 'p'),
-				...existingPTags,
-				newPTag
-			];
-
-	blockEventTags = newTags;
-	await publishList(10000, newTags);
+	const newEntries = get(blockedListEntries);
+	await saveList(signer, get(relays), { kind: 10000 }, newEntries);
 }
 
 export async function unblockUser(pubkey: string): Promise<void> {
@@ -138,25 +125,33 @@ export async function unblockUser(pubkey: string): Promise<void> {
 	if (!signer) throw new Error('Not authenticated');
 
 	// Optimistic update
-	blockedPubkeys.update((s) => {
-		const next = new Set(s);
-		next.delete(pubkey);
-		return next;
-	});
+	blockedListEntries.update((entries) => entries.filter((e) => e.tag[1] !== pubkey));
 
-	const newTags = blockEventTags.filter(([k, pk]) => !(k === 'p' && pk === pubkey));
-	blockEventTags = newTags;
-	await publishList(10000, newTags);
+	const newEntries = get(blockedListEntries);
+	await saveList(signer, get(relays), { kind: 10000 }, newEntries);
+}
+
+/** Sets an existing mute-list entry's privacy flag and republishes the list. Used by the Lists page. */
+export async function setBlockedEntryPrivacy(pubkey: string, isPrivate: boolean): Promise<void> {
+	const signer = get(auth);
+	if (!signer) throw new Error('Not authenticated');
+
+	blockedListEntries.update((entries) =>
+		entries.map((e) => (e.tag[1] === pubkey ? { ...e, private: isPrivate } : e))
+	);
+
+	const newEntries = get(blockedListEntries);
+	await saveList(signer, get(relays), { kind: 10000 }, newEntries);
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
-async function publishList(kind: 3 | 10000, tags: string[][]): Promise<void> {
+async function publishFollowList(tags: string[][]): Promise<void> {
 	const signer = get(auth);
 	if (!signer) throw new Error('Not authenticated');
 
 	const event: NostrEvent = {
-		kind,
+		kind: 3,
 		created_at: Math.floor(Date.now() / 1000),
 		tags,
 		content: '',
