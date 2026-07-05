@@ -14,6 +14,18 @@
 	} from '$lib/stores/social';
 
 	import { relays } from '$lib/stores/relays';
+	import {
+		bookmarkedCoordinates,
+		addBookmark,
+		removeBookmark,
+		loadBookmarks
+	} from '$lib/stores/bookmarks';
+	import {
+		pinnedCoordinates,
+		addPin,
+		removePin,
+		loadPins
+	} from '$lib/stores/pins';
 
 	let { event, relays: relaysProp, score = undefined, onTagClick = undefined }: {
 		event: NostrEvent;
@@ -32,7 +44,11 @@
 
 	// Load social lists once when we have a logged-in user
 	$effect(() => {
-		if ($myPubkey) loadSocialLists();
+		if ($myPubkey) {
+			loadSocialLists();
+			loadBookmarks();
+			loadPins();
+		}
 	});
 
 	function getTitle(): string {
@@ -59,6 +75,10 @@
 		return d?.[1] || '';
 	}
 
+	function getCoordinate(): string {
+		return `30023:${event.pubkey}:${getIdentifier()}`;
+	}
+
 	function timeAgo(ts: number): string {
 		const diff = Date.now() / 1000 - ts;
 		if (diff < 3600) return `${Math.round(diff / 60)}m`;
@@ -77,9 +97,13 @@
 
 	let isFollowing = $derived($follows.has(event.pubkey));
 	let isBlocked = $derived($blocks.has(event.pubkey));
+	let isBookmarked = $derived($bookmarkedCoordinates.has(getCoordinate()));
+	let isPinned = $derived($pinnedCoordinates.has(getCoordinate()));
 
 	let followBusy = $state(false);
 	let blockBusy = $state(false);
+	let bookmarkBusy = $state(false);
+	let pinBusy = $state(false);
 
 	async function handleFollow(e: MouseEvent) {
 		e.preventDefault();
@@ -104,6 +128,34 @@
 			else await blockUser(event.pubkey);
 		} finally {
 			blockBusy = false;
+		}
+	}
+
+	async function handleBookmark(e: MouseEvent) {
+		e.preventDefault();
+		e.stopPropagation();
+		if (bookmarkBusy) return;
+		bookmarkBusy = true;
+		try {
+			const coordinate = getCoordinate();
+			if (isBookmarked) await removeBookmark(coordinate);
+			else await addBookmark(coordinate, { private: true });
+		} finally {
+			bookmarkBusy = false;
+		}
+	}
+
+	async function handlePin(e: MouseEvent) {
+		e.preventDefault();
+		e.stopPropagation();
+		if (pinBusy) return;
+		pinBusy = true;
+		try {
+			const coordinate = getCoordinate();
+			if (isPinned) await removePin(coordinate);
+			else await addPin(coordinate, { private: true });
+		} finally {
+			pinBusy = false;
 		}
 	}
 </script>
@@ -156,6 +208,34 @@
 				<svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
 					<circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.5"/>
 					<line x1="3.5" y1="3.5" x2="12.5" y2="12.5" stroke="currentColor" stroke-width="1.5"/>
+				</svg>
+			</button>
+
+			<!-- Bookmark button -->
+			<button
+				class="social-btn bookmark-btn"
+				class:active={isBookmarked}
+				onclick={handleBookmark}
+				disabled={bookmarkBusy}
+				title={isBookmarked ? 'Remove bookmark' : 'Bookmark article'}
+				aria-label={isBookmarked ? 'Remove bookmark' : 'Bookmark article'}
+			>
+				<svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+					<path d="M4 1.5h8a1 1 0 0 1 1 1V15l-5-3.5L3 15V2.5a1 1 0 0 1 1-1z" />
+				</svg>
+			</button>
+
+			<!-- Pin button -->
+			<button
+				class="social-btn pin-btn"
+				class:active={isPinned}
+				onclick={handlePin}
+				disabled={pinBusy}
+				title={isPinned ? 'Unpin article' : 'Pin article'}
+				aria-label={isPinned ? 'Unpin article' : 'Pin article'}
+			>
+				<svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+					<path d="M8 1l1.5 4.5L14 7l-4 3 .5 5-2.5-3-2.5 3 .5-5-4-3 4.5-1.5z" />
 				</svg>
 			</button>
 		{/if}
@@ -276,6 +356,30 @@
 	}
 	.block-btn.active:hover:not(:disabled) {
 		background: color-mix(in srgb, var(--c-danger, #e55) 25%, transparent);
+	}
+
+	/* Bookmark */
+	.bookmark-btn:hover:not(:disabled) {
+		color: var(--c-accent);
+		border-color: var(--c-accent);
+		background: color-mix(in srgb, var(--c-accent) 10%, transparent);
+	}
+	.bookmark-btn.active {
+		color: var(--c-accent);
+		border-color: var(--c-accent);
+		background: color-mix(in srgb, var(--c-accent) 15%, transparent);
+	}
+
+	/* Pin */
+	.pin-btn:hover:not(:disabled) {
+		color: var(--c-accent);
+		border-color: var(--c-accent);
+		background: color-mix(in srgb, var(--c-accent) 10%, transparent);
+	}
+	.pin-btn.active {
+		color: var(--c-accent);
+		border-color: var(--c-accent);
+		background: color-mix(in srgb, var(--c-accent) 15%, transparent);
 	}
 
 	.tag {
