@@ -3,10 +3,17 @@ import type { NostrEvent } from 'nostr-tools';
 import { getKeychain, storeKeychain, clearKeychain } from '$lib/tauri';
 import { isTauri } from '$lib/utils/env';
 
+export type CryptoMethods = {
+	encrypt(pubkey: string, plaintext: string): Promise<string>;
+	decrypt(pubkey: string, ciphertext: string): Promise<string>;
+};
+
 export type Signer = {
 	type: 'extension' | 'nsec' | 'passkey' | 'keychain';
 	pubkey: string;
 	sign: (event: NostrEvent) => Promise<NostrEvent>;
+	nip04?: CryptoMethods;
+	nip44?: CryptoMethods;
 };
 
 function createAuthStore() {
@@ -48,7 +55,7 @@ function createAuthStore() {
 	}
 
 	async function loginWithNsec(nsec: string): Promise<Signer> {
-		const { nip19, getPublicKey, finalizeEvent } = await import('nostr-tools');
+		const { nip19, getPublicKey, finalizeEvent, nip04, nip44 } = await import('nostr-tools');
 		const decoded = nip19.decode(nsec);
 		if (decoded.type !== 'nsec') throw new Error('Invalid nsec');
 		const sk = decoded.data as Uint8Array;
@@ -59,6 +66,14 @@ function createAuthStore() {
 			sign: async (event: NostrEvent) => {
 				const signed = finalizeEvent(event, sk);
 				return signed as unknown as NostrEvent;
+			},
+			nip04: {
+				encrypt: async (pk, plaintext) => nip04.encrypt(sk, pk, plaintext),
+				decrypt: async (pk, ciphertext) => nip04.decrypt(sk, pk, ciphertext)
+			},
+			nip44: {
+				encrypt: async (pk, plaintext) => nip44.encrypt(plaintext, nip44.getConversationKey(sk, pk)),
+				decrypt: async (pk, ciphertext) => nip44.decrypt(ciphertext, nip44.getConversationKey(sk, pk))
 			}
 		};
 		setSigner(signer, () => {
