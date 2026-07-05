@@ -102,7 +102,9 @@ function createAuthStore() {
 			sign: async (event: NostrEvent) => {
 				const signed = await shim.signEvent(event as any);
 				return signed as unknown as NostrEvent;
-			}
+			},
+			nip04: shim.nip04,
+			nip44: shim.nip44
 		};
 		setSigner(signer, () => shim.destroy());
 		return signer;
@@ -127,7 +129,9 @@ function createAuthStore() {
 			sign: async (event: NostrEvent) => {
 				const signed = await shim.signEvent(event as any);
 				return signed as unknown as NostrEvent;
-			}
+			},
+			nip04: shim.nip04,
+			nip44: shim.nip44
 		};
 		setSigner(signer, () => shim.destroy());
 		return signer;
