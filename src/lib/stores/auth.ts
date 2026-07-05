@@ -32,8 +32,10 @@ function createAuthStore() {
 			const ext = win.nostr as {
 				getPublicKey: () => Promise<string>;
 				signEvent: (event: NostrEvent) => Promise<NostrEvent>;
+				nip04?: CryptoMethods;
+				nip44?: CryptoMethods;
 			};
-			return {
+			const signer: Signer = {
 				type: 'extension',
 				pubkey: '',
 				sign: async (event: NostrEvent) => {
@@ -41,6 +43,9 @@ function createAuthStore() {
 					return signed;
 				}
 			};
+			if (ext.nip04) signer.nip04 = ext.nip04;
+			if (ext.nip44) signer.nip44 = ext.nip44;
+			return signer;
 		}
 		return null;
 	}
