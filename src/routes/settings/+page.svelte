@@ -139,6 +139,12 @@
 	</section>
 
 	<section>
+		<h2>Lists</h2>
+		<p class="desc">Manage your muted users, bookmarks, pins, and categorized people lists.</p>
+		<a href="/lists" class="lists-link">Manage lists (mute, bookmarks, pins, categorized)</a>
+	</section>
+
+	<section>
 		<h2>About</h2>
 		<p class="desc">
 			write_nostr is a minimalist long-form writing app for Nostr.
@@ -251,6 +257,12 @@
 	.danger {
 		color: var(--c-danger);
 		border-color: var(--c-danger);
+	}
+	.lists-link {
+		display: inline-block;
+		font-size: 0.875rem;
+		color: var(--c-accent, var(--c-text));
+		text-decoration: underline;
 	}
 	.nwc-status {
 		display: flex;
