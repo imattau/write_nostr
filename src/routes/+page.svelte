@@ -11,8 +11,9 @@
 		fetchInteractionScores,
 		fetchOlderArticles
 	} from '$lib/nostr/fetch';
-	import { getAllEventsByKind, TTL } from '$lib/db';
+	import { getAllEventsByKind, TTL } from '$lib/graph';
 	import ArticleCard from '$lib/components/ArticleCard.svelte';
+	import SemanticSearch from '$lib/components/SemanticSearch.svelte';
 
 	type FeedMode = 'all' | 'circle' | 'top';
 
@@ -237,6 +238,8 @@
 			</button>
 		</div>
 	</div>
+
+	<SemanticSearch />
 
 	{#if error}
 		<p class="error">{error}</p>

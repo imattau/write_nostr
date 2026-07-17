@@ -6,7 +6,7 @@
 	import { auth, isAuthenticated, pubkey } from '$lib/stores/auth';
 	import { relays } from '$lib/stores/relays';
 	import { onMount } from 'svelte';
-	import { pruneStaleCache } from '$lib/db';
+	import { pruneStaleCache } from '$lib/graph';
 
 	let { children } = $props();
 

@@ -2,11 +2,10 @@ import { writable, get } from 'svelte/store';
 import { fetchProfiles, type NostrProfile } from '$lib/nostr/profiles';
 import { relays } from '$lib/stores/relays';
 import { nip19 } from 'nostr-tools';
-import { getProfiles, putProfiles } from '$lib/db';
-import { LRUMap } from '$lib/lru';
+import { getProfiles, putProfiles } from '$lib/graph';
 
 // In-memory cache: pubkey → profile (undefined = not yet fetched, null = attempted, no result)
-const cache = writable<LRUMap<string, NostrProfile | null>>(new LRUMap(500));
+const cache = writable<Map<string, NostrProfile | null>>(new Map());
 
 // Track in-flight requests to avoid duplicate fetches
 const pending = new Set<string>();

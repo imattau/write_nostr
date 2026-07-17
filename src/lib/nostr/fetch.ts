@@ -12,13 +12,55 @@
 
 import { SimplePool } from 'nostr-tools';
 import type { NostrEvent, Filter } from 'nostr-tools';
-import { getEvents, putEvents, getEvent, TTL } from '$lib/db';
+import { getEvents, putEvents, getEvent, indexEventVector, TTL } from '$lib/graph';
+import { getEmbedding, getArticleText, isEmbeddingReady, onEmbeddingReady } from '$lib/embeddings';
 
 let pool: SimplePool;
 
 function getPool(): SimplePool {
 	if (!pool) pool = new SimplePool();
 	return pool;
+}
+
+// ── Embedding helpers ───────────────────────────────────────────
+
+const embeddingQueue = new Set<string>();
+let pendingArticles: NostrEvent[] = [];
+let readyListenerRegistered = false;
+
+async function processEmbeddingQueue(): Promise<void> {
+	const batch = pendingArticles.slice();
+	pendingArticles = [];
+	if (!batch.length) return;
+	for (const a of batch) embeddingQueue.add(a.id);
+	try {
+		if (!isEmbeddingReady()) return;
+		await Promise.all(
+			batch.map(async (a) => {
+				const text = getArticleText(a);
+				if (!text) return;
+				const vector = await getEmbedding(text);
+				await indexEventVector(a.id, vector);
+			})
+		);
+	} finally {
+		for (const a of batch) embeddingQueue.delete(a.id);
+	}
+	// If more articles queued while processing, flush again
+	if (pendingArticles.length > 0) processEmbeddingQueue().catch(() => {});
+}
+
+async function embedAndIndexArticles(articles: NostrEvent[]): Promise<void> {
+	const fresh = articles.filter((a) => !embeddingQueue.has(a.id));
+	if (!fresh.length) return;
+	pendingArticles.push(...fresh);
+	if (!readyListenerRegistered) {
+		readyListenerRegistered = true;
+		onEmbeddingReady(() => { processEmbeddingQueue().catch(() => {}); });
+	}
+	if (isEmbeddingReady()) {
+		processEmbeddingQueue().catch(() => {});
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -46,6 +88,7 @@ export async function fetchArticles(
 	const sorted = events.sort((a, b) => b.created_at - a.created_at);
 
 	await putEvents(sorted, groupKey);
+	embedAndIndexArticles(sorted).catch(() => {});
 
 	return sorted;
 }
@@ -69,7 +112,10 @@ export async function fetchOlderArticles(
 	const p = getPool();
 	const events = await p.querySync(relayUrls, filter);
 	const sorted = events.sort((a, b) => b.created_at - a.created_at);
-	if (sorted.length > 0) await putEvents(sorted, groupKey);
+	if (sorted.length > 0) {
+		await putEvents(sorted, groupKey);
+		embedAndIndexArticles(sorted).catch(() => {});
+	}
 	return sorted;
 }
 
@@ -92,7 +138,10 @@ export async function fetchArticleByIdentifier(
 	const event = events[0] || null;
 
 	// Cache the individual article if found
-	if (event) await putEvents([event], `articles-author-${pubkey}`);
+	if (event) {
+		await putEvents([event], `articles-author-${pubkey}`);
+		embedAndIndexArticles([event]).catch(() => {});
+	}
 
 	return event;
 }

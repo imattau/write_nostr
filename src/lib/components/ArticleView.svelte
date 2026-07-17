@@ -1,10 +1,12 @@
 <script lang="ts">
 	import type { NostrEvent } from 'nostr-tools';
 	import { nip19 } from 'nostr-tools';
+	import { encodeNaddr } from '$lib/utils/nip19';
 	import { renderMarkdown, extractNostrPubkeys } from '$lib/utils/markdown';
 	import { profileCache, requestProfiles, displayName } from '$lib/stores/profiles';
 	import type { NostrProfile } from '$lib/nostr/profiles';
 	import { relays } from '$lib/stores/relays';
+	import { findRelatedEvents } from '$lib/graph';
 	import TranslateButton from '$lib/components/TranslateButton.svelte';
 	import InteractionButtons from '$lib/components/InteractionButtons.svelte';
 
@@ -30,6 +32,22 @@
 	$effect(() => {
 		event;
 		translation = null;
+	});
+
+	// Similar articles via vector search
+	let similarArticles = $state<NostrEvent[]>([]);
+	let similarLoading = $state(false);
+
+	$effect(() => {
+		event;
+		similarArticles = [];
+		if (event?.id) {
+			similarLoading = true;
+			findRelatedEvents(event.id, 0.2, 5)
+				.then((articles) => { similarArticles = articles; })
+				.catch(() => {})
+				.finally(() => { similarLoading = false; });
+		}
 	});
 
 	function getTitle(): string {
@@ -153,6 +171,20 @@
 	<div class="content">
 		{@html renderedContentHtml}
 	</div>
+
+	{#if similarArticles.length > 0}
+		<section class="similar">
+			<h2 class="similar-heading">Similar Articles</h2>
+			<div class="similar-list">
+				{#each similarArticles as sa (sa.id)}
+					<a href="/article/{encodeNaddr(sa.pubkey, sa.tags.find(([k]) => k === 'd')?.[1] || '', $relays)}" class="similar-item">
+						<span class="similar-title">{sa.tags.find(([k]) => k === 'title')?.[1] || 'Untitled'}</span>
+						<span class="similar-author">{displayName(sa.pubkey, profileMap)}</span>
+					</a>
+				{/each}
+			</div>
+		</section>
+	{/if}
 </article>
 
 <style>
@@ -320,5 +352,48 @@
 		.content :global(ol) {
 			padding-left: 1.25rem;
 		}
+	}
+	.similar {
+		margin-top: var(--space-2xl);
+		padding-top: var(--space-xl);
+		border-top: 1px solid var(--c-border);
+	}
+	.similar-heading {
+		font-size: 1rem;
+		font-weight: 600;
+		margin-bottom: var(--space-md);
+	}
+	.similar-list {
+		display: flex;
+		flex-direction: column;
+		gap: var(--space-sm);
+	}
+	.similar-item {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		gap: var(--space-sm);
+		padding: var(--space-sm) var(--space-md);
+		border: 1px solid var(--c-border);
+		border-radius: var(--radius);
+		text-decoration: none;
+		color: inherit;
+		transition: border-color 0.15s;
+	}
+	.similar-item:hover {
+		border-color: var(--c-accent);
+	}
+	.similar-title {
+		font-size: 0.875rem;
+		font-weight: 500;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		flex: 1;
+	}
+	.similar-author {
+		font-size: 0.75rem;
+		color: var(--c-text-secondary);
+		flex-shrink: 0;
 	}
 </style>
