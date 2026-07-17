@@ -13,7 +13,7 @@
 import { SimplePool } from 'nostr-tools';
 import type { NostrEvent, Filter } from 'nostr-tools';
 import { getEvents, putEvents, getEvent, indexEventVector, TTL } from '$lib/graph';
-import { getEmbedding, getArticleText, isEmbeddingReady, onEmbeddingReady } from '$lib/embeddings';
+import { getEmbedding, getArticleText } from '$lib/embeddings';
 
 let pool: SimplePool;
 
@@ -25,18 +25,14 @@ function getPool(): SimplePool {
 // ── Embedding helpers ───────────────────────────────────────────
 
 const embeddingQueue = new Set<string>();
-let pendingArticles: NostrEvent[] = [];
-let readyListenerRegistered = false;
 
-async function processEmbeddingQueue(): Promise<void> {
-	const batch = pendingArticles.slice();
-	pendingArticles = [];
-	if (!batch.length) return;
-	for (const a of batch) embeddingQueue.add(a.id);
+async function embedAndIndexArticles(articles: NostrEvent[]): Promise<void> {
+	const fresh = articles.filter((a) => !embeddingQueue.has(a.id));
+	if (!fresh.length) return;
+	for (const a of fresh) embeddingQueue.add(a.id);
 	try {
-		if (!isEmbeddingReady()) return;
 		await Promise.all(
-			batch.map(async (a) => {
+			fresh.map(async (a) => {
 				const text = getArticleText(a);
 				if (!text) return;
 				const vector = await getEmbedding(text);
@@ -44,22 +40,7 @@ async function processEmbeddingQueue(): Promise<void> {
 			})
 		);
 	} finally {
-		for (const a of batch) embeddingQueue.delete(a.id);
-	}
-	// If more articles queued while processing, flush again
-	if (pendingArticles.length > 0) processEmbeddingQueue().catch(() => {});
-}
-
-async function embedAndIndexArticles(articles: NostrEvent[]): Promise<void> {
-	const fresh = articles.filter((a) => !embeddingQueue.has(a.id));
-	if (!fresh.length) return;
-	pendingArticles.push(...fresh);
-	if (!readyListenerRegistered) {
-		readyListenerRegistered = true;
-		onEmbeddingReady(() => { processEmbeddingQueue().catch(() => {}); });
-	}
-	if (isEmbeddingReady()) {
-		processEmbeddingQueue().catch(() => {});
+		for (const a of fresh) embeddingQueue.delete(a.id);
 	}
 }
 

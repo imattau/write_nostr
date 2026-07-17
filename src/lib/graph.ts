@@ -204,6 +204,36 @@ export async function searchSimilarEvents(
 		.map(nodeToEvent);
 }
 
+export async function rankEventsByCentroid(ids: string[]): Promise<string[]> {
+	if (!isBrowser() || !ids.length) return ids;
+	const graph = await getGraph();
+	const vectors: { id: string; vector: Float64Array }[] = [];
+	for (const id of ids) {
+		const node = graph.getNode(id);
+		if (node?.vector) vectors.push({ id, vector: node.vector });
+	}
+	if (vectors.length < 2) return ids;
+	const dims = vectors[0].vector.length;
+	const centroid = new Float64Array(dims);
+	for (const v of vectors) {
+		for (let d = 0; d < dims; d++) centroid[d] += v.vector[d];
+	}
+	for (let d = 0; d < dims; d++) centroid[d] /= vectors.length;
+	const scores = vectors.map((v) => {
+		let dot = 0, na = 0, nb = 0;
+		for (let d = 0; d < dims; d++) {
+			dot += v.vector[d] * centroid[d];
+			na += v.vector[d] * v.vector[d];
+			nb += centroid[d] * centroid[d];
+		}
+		return { id: v.id, score: dot / (Math.sqrt(na) * Math.sqrt(nb) || 1) };
+	});
+	scores.sort((a, b) => b.score - a.score);
+	const ranked = scores.map((s) => s.id);
+	const missing = ids.filter((id) => !vectors.some((v) => v.id === id));
+	return [...ranked, ...missing];
+}
+
 export async function findRelatedEvents(
 	eventId: string,
 	threshold?: number,

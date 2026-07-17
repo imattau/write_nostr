@@ -8,10 +8,10 @@
 	import {
 		fetchArticles,
 		fetchFollowList,
-		fetchInteractionScores,
 		fetchOlderArticles
 	} from '$lib/nostr/fetch';
-	import { getAllEventsByKind, TTL } from '$lib/graph';
+	import { getAllEventsByKind, TTL, rankEventsByCentroid, indexEventVector } from '$lib/graph';
+	import { getEmbedding, getArticleText } from '$lib/embeddings';
 	import ArticleCard from '$lib/components/ArticleCard.svelte';
 	import SemanticSearch from '$lib/components/SemanticSearch.svelte';
 
@@ -117,19 +117,18 @@
 				circleFollowing = following;
 				articles = await fetchArticles(relayList, { authors: following, skipCache: force });
 			} else if (nextMode === 'top') {
-				// Fetch a wider pool then score them
+				// Fetch a wider pool then rank by vector centroid
 				const pool = await fetchArticles(relayList, { limit: 100, skipCache: force });
 				articles = pool;
 				loading = false;
 
-				// Fetch interaction scores in the background
+				// Ensure articles have vectors computed, then rank by
+				// similarity to the centroid (most representative first)
 				scoringLoading = true;
-				const interactionScores = await fetchInteractionScores(pool, relayList);
-				scores = interactionScores;
-				// Re-sort by score descending
-				articles = [...pool].sort(
-					(a, b) => (interactionScores.get(b.id) ?? 0) - (interactionScores.get(a.id) ?? 0)
-				);
+				const ids = pool.map((a) => a.id);
+				await embedIndexedArticles(ids, pool);
+				const ranked = await rankEventsByCentroid(ids);
+				articles = ranked.map((id) => pool.find((a) => a.id === id)!).filter(Boolean);
 				scoringLoading = false;
 				return;
 			}
@@ -138,6 +137,19 @@
 		}
 
 		loading = false;
+	}
+
+	async function embedIndexedArticles(_ids: string[], pool: NostrEvent[]) {
+		await Promise.all(
+			pool.map(async (a) => {
+				const text = getArticleText(a);
+				if (!text) return;
+				try {
+					const vec = await getEmbedding(text);
+					await indexEventVector(a.id, vec);
+				} catch {}
+			})
+		);
 	}
 
 	async function loadMore() {
@@ -234,7 +246,7 @@
 				>
 					<path d="M13.65 2.35A8 8 0 1 0 15 8h-2a6 6 0 1 1-1.06-3.41L9 7h6V1l-1.35 1.35z"/>
 				</svg>
-				{loading ? 'Loading…' : scoringLoading ? 'Scoring…' : 'Refresh'}
+				{loading ? 'Loading…' : scoringLoading ? 'Ranking…' : 'Refresh'}
 			</button>
 		</div>
 	</div>
@@ -254,7 +266,7 @@
 	{:else}
 		{#if mode === 'top' && scoringLoading}
 			<p class="scoring-notice">
-				<span class="pulse">●</span> Calculating interaction scores…
+				<span class="pulse">●</span> Ranking by topic relevance…
 			</p>
 		{/if}
 		{#if tagFilter && filteredArticles.length === 0}
@@ -265,7 +277,6 @@
 					<ArticleCard
 						event={article}
 						relays={$relays}
-						score={mode === 'top' ? (scores.get(article.id) ?? 0) : undefined}
 						onTagClick={(tag) => tagFilter = tagFilter === tag ? null : tag}
 					/>
 				{/each}
