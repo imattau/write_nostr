@@ -1,7 +1,11 @@
+import { env, pipeline } from '@xenova/transformers';
 import type { NostrEvent } from 'nostr-tools';
-import { pipeline } from '@xenova/transformers';
 
 type ExtractPipeline = (texts: string | string[], options?: { pooling?: string; normalize?: boolean }) => Promise<{ data: Float32Array; dims: number[] }>;
+
+// Serve model files from our own static directory instead of HuggingFace CDN
+env.remoteHost = '/models/';
+env.remotePathTemplate = '{model}/';
 
 let _pipe: ExtractPipeline | null = null;
 let _pipePromise: Promise<void> | null = null;
@@ -54,11 +58,6 @@ export async function getEmbedding(text: string): Promise<Float64Array> {
 	const pipe = await getPipeline();
 	const result = await pipe(text, { pooling: 'mean', normalize: true });
 	return new Float64Array(result.data);
-}
-
-const SSR_GUARD = typeof window === 'undefined';
-if (SSR_GUARD) {
-	// Prevent SSR from downloading the model; it will be initialized on first browser call
 }
 
 export function getArticleText(event: NostrEvent): string {
