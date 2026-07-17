@@ -4,6 +4,7 @@ import type { NostrEvent } from 'nostr-tools';
 import { auth } from '$lib/stores/auth';
 import { relays } from '$lib/stores/relays';
 import { loadList, saveList, type ListEntry } from '$lib/nostr/lists';
+import { removeNodesByPubkey } from '$lib/graph';
 
 // ── Internal state ─────────────────────────────────────────────────────────
 
@@ -115,6 +116,9 @@ export async function blockUser(pubkey: string, opts: { private?: boolean } = {}
 		if (entries.some((e) => e.tag[1] === pubkey)) return entries;
 		return [...entries, { tag: ['p', pubkey], private: isPrivate }];
 	});
+
+	// Purge cached events and profile for the blocked user
+	removeNodesByPubkey(pubkey).catch(() => {});
 
 	const newEntries = get(blockedListEntries);
 	await saveList(signer, get(relays), { kind: 10000 }, newEntries);

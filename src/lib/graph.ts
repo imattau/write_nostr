@@ -162,6 +162,20 @@ export async function pruneStaleCache(): Promise<void> {
 	}
 }
 
+// ── Cache cleanup ───────────────────────────────────────────────
+
+export async function removeNodesByPubkey(pubkey: string): Promise<void> {
+	if (!isBrowser()) return;
+	const graph = await getGraph();
+	const eventIds = graph.query()
+		.whereNodeType('event')
+		.whereAttribute('pubkey', pubkey)
+		.ids();
+	for (const id of eventIds) graph.removeNode(id);
+	const profileNode = graph.getNode(pubkey);
+	if (profileNode?.type === 'profile') graph.removeNode(pubkey);
+}
+
 // ── Vector search ───────────────────────────────────────────────
 
 export async function indexEventVector(

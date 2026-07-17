@@ -8,5 +8,11 @@ export default defineConfig({
 		watch: {
 			ignored: ['**/src-tauri/**']
 		}
+	},
+	ssr: {
+		external: ['@xenova/transformers']
+	},
+	optimizeDeps: {
+		exclude: ['@xenova/transformers']
 	}
 });
