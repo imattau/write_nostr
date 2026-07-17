@@ -1,5 +1,4 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import { resolveNaddr } from '$lib/nostr/resolve';
 	import ArticleView from '$lib/components/ArticleView.svelte';
@@ -8,10 +7,6 @@
 	let event = $state<NostrEvent | null>(null);
 	let loading = $state(true);
 	let error = $state('');
-
-	onMount(async () => {
-		await loadArticle();
-	});
 
 	async function loadArticle() {
 		loading = true;
@@ -29,6 +24,11 @@
 		}
 		loading = false;
 	}
+
+	$effect(() => {
+		$page.params.naddr;
+		loadArticle();
+	});
 </script>
 
 <div class="reader">
