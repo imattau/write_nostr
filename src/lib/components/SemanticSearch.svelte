@@ -4,12 +4,15 @@
 	import { searchSimilarEvents } from '$lib/graph';
 	import ArticleCard from '$lib/components/ArticleCard.svelte';
 	import { relays } from '$lib/stores/relays';
+	import { blocks } from '$lib/stores/social';
 
 	let query = $state('');
 	let results = $state<NostrEvent[]>([]);
 	let searching = $state(false);
 	let hasSearched = $state(false);
 	let error = $state('');
+
+	let visibleResults = $derived(results.filter((a) => !$blocks.has(a.pubkey)));
 
 	async function handleSearch() {
 		const q = query.trim();
@@ -65,9 +68,9 @@
 		<p class="error">{error}</p>
 	{/if}
 
-	{#if results.length > 0}
+	{#if visibleResults.length > 0}
 		<div class="results">
-			{#each results as article (article.id)}
+			{#each visibleResults as article (article.id)}
 				<ArticleCard event={article} relays={$relays} />
 			{/each}
 		</div>
