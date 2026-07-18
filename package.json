@@ -1,13 +1,57 @@
 {
 	"name": "write-nostr",
-	"version": "0.1.6",
+	"version": "0.2.0",
+	"private": false,
+	"description": "Browser-based long-form writing app for the Nostr protocol — NIP-23 editor, feed reader, and publishing tool",
+	"license": "MIT",
+	"author": "lostcause <lostcause@3nostr.com>",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/imattau/write_nostr.git"
+	},
+	"bugs": {
+		"url": "https://github.com/imattau/write_nostr/issues"
+	},
+	"homepage": "https://github.com/imattau/write_nostr#readme",
+	"keywords": [
+		"nostr",
+		"nip-23",
+		"long-form",
+		"writing",
+		"markdown",
+		"editor",
+		"svelte",
+		"sveltekit",
+		"pwa"
+	],
 	"type": "module",
+	"engines": {
+		"node": ">=18"
+	},
+	"files": [
+		"build/",
+		"scripts/",
+		"static/",
+		"svelte.config.js",
+		"tsconfig.json",
+		"vite.config.ts",
+		"vitest.config.ts",
+		"README.md",
+		"LICENSE"
+	],
+	"bin": {
+		"write-nostr": "scripts/serve.mjs"
+	},
+	"publishConfig": {
+		"access": "public"
+	},
 	"scripts": {
 		"dev": "vite dev",
 		"build": "vite build",
 		"preview": "vite preview",
 		"deploy": "bash scripts/deploy-remote.sh",
 		"prepare": "svelte-kit sync || echo ''",
+		"prepublishOnly": "npm run build",
 		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
 		"test": "vitest run",
