@@ -1,6 +1,6 @@
 id: com.writenostr.desktop
 runtime: org.gnome.Platform
-runtime-version: '48'
+runtime-version: '50'
 sdk: org.gnome.Sdk
 command: write-nostr
 finish-args:
