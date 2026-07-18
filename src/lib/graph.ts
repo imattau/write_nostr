@@ -28,7 +28,7 @@ async function getGraph(): Promise<PolyGraph> {
 	if (!isBrowser()) throw new Error('PolyGraph unavailable server-side');
 	if (!_initPromise) {
 		_initPromise = (async () => {
-			const adapter = new IndexedDBAdapter({ name: 'write-nostr-poly', version: 1 });
+			const adapter = new IndexedDBAdapter({ name: 'write-nostr-poly', version: 2 });
 			_graph = new PolyGraph(adapter, MAX_NODES);
 			try {
 				await _graph.warm();
