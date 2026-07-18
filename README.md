@@ -16,6 +16,7 @@ Whether you're a writer looking for a censorship-resistant publishing platform o
 
 - **Write & Publish** — Full-featured Markdown editor with live preview, formatting toolbar, metadata (title, summary, featured image, tags), and direct publishing to Nostr relays.
 - **Browse Articles** — Three feed modes: **All** (global firehose), **My Circle** (articles from people you follow), and **Top Articles** (sorted by interaction score). Tag filtering, pagination, and manual refresh.
+- **Related Articles** — Vector-similarity search across articles powered by PolyGraph, surfacing related content for any article.
 - **Drafts** — Auto-saving drafts to localStorage with a dedicated drafts manager.
 - **Authentication** — Sign in via NIP-07 browser extension, paste an nsec key, or use a passkey (WebAuthn/PRF).
 - **Social** — Follow/unfollow and block/unblock authors directly from the feed.
@@ -32,6 +33,7 @@ Whether you're a writer looking for a censorship-resistant publishing platform o
 | Nostr | [nostr-tools](https://github.com/nbd-wtf/nostr-tools) — SimplePool, event signing, NIP-19 encoding/decoding |
 | Passkeys | [nostr-passkey](https://github.com/nostr-passkey/nostr-passkey) — WebAuthn/PRF-based key management |
 | Markdown | [marked](https://marked.js.org/) — rendering |
+| Graph / Vector Search | [PolyGraph](https://github.com/anomalyco/polypack) — persistent graph with IndexedDB adapter, vector similarity search |
 | Caching | [idb](https://github.com/jakearchibald/idb) — IndexedDB cache layer |
 | Adapter | [@sveltejs/adapter-static](https://kit.svelte.dev/docs/adapter-static) — static SPA output |
 
@@ -77,6 +79,13 @@ The deploy script:
 
 - **Local**: `npm`, `rsync`
 - **Remote**: `python3`, `systemctl`, `ss`, `curl`, `rsync`, `sudo`
+
+## PolyGraph Cache
+
+write_nostr uses [PolyGraph](https://github.com/anomalyco/polypack) (`@0xx0lostcause0xx0/polypack`), a persistent graph database built on IndexedDB, to cache Nostr events and profiles in the browser. The cache is TTL-based with automatic pruning of stale entries, and supports:
+
+- **Vector search** — Articles are indexed by embedding vector, enabling similarity-based related-article recommendations and centroid-based ranking.
+- **Event & profile caching** — Kind:30023 articles, follow lists, relay lists, and kind:0 profiles are cached locally to reduce relay round-trips.
 
 ### Configuration
 
