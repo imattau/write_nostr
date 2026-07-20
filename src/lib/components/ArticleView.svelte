@@ -9,6 +9,7 @@
 	import { findRelatedEvents } from '$lib/graph';
 	import TranslateButton from '$lib/components/TranslateButton.svelte';
 	import InteractionButtons from '$lib/components/InteractionButtons.svelte';
+	import { pubkey } from '$lib/stores/auth';
 
 	let { event }: { event: NostrEvent } = $props();
 
@@ -33,6 +34,9 @@
 		event;
 		translation = null;
 	});
+
+	let isOwner = $derived($pubkey === event.pubkey);
+	let naddr = $derived(encodeNaddr(event.pubkey, event.tags.find(([k]) => k === 'd')?.[1] || '', $relays));
 
 	// Similar articles via vector search
 	let similarArticles = $state<NostrEvent[]>([]);
@@ -159,6 +163,9 @@
 				{displayName(event.pubkey, profileMap)}
 			</span>
 			<span class="date">{formatDate(getPublishedAt())}</span>
+			{#if isOwner}
+				<a href="/new?naddr={naddr}" class="edit-btn">Edit</a>
+			{/if}
 			<InteractionButtons {event} />
 		</div>
 		{#if displaySummary}
@@ -240,6 +247,15 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
+	}
+	.edit-btn {
+		font-size: 0.75rem;
+		padding: 2px 10px;
+		border-radius: var(--radius);
+		background: var(--c-accent);
+		color: #fff;
+		text-decoration: none;
+		font-weight: 500;
 	}
 	.summary {
 		font-size: 1.125rem;
