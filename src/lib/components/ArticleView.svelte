@@ -211,7 +211,7 @@
 				pubkey={event.pubkey}
 				relays={$relays.join(',')}
 				event-id={event.id}
-			/>
+			></disgus-comments>
 		</section>
 	{/if}
 </article>

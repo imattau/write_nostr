@@ -1,4 +1,5 @@
 import { writable, derived } from 'svelte/store';
+import { nip19, getPublicKey, finalizeEvent, nip04, nip44 } from 'nostr-tools';
 import type { NostrEvent } from 'nostr-tools';
 import { getKeychain, storeKeychain, clearKeychain } from '$lib/tauri';
 import { isTauri } from '$lib/utils/env';
@@ -60,7 +61,6 @@ function createAuthStore() {
 	}
 
 	async function loginWithNsec(nsec: string): Promise<Signer> {
-		const { nip19, getPublicKey, finalizeEvent, nip04, nip44 } = await import('nostr-tools');
 		const decoded = nip19.decode(nsec);
 		if (decoded.type !== 'nsec') throw new Error('Invalid nsec');
 		const sk = decoded.data as Uint8Array;
