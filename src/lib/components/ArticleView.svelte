@@ -42,6 +42,17 @@
 	let similarArticles = $state<NostrEvent[]>([]);
 	let similarLoading = $state(false);
 
+	let disgusLoaded = $state(false);
+
+	$effect(() => {
+		if (!event) return;
+		const script = document.createElement('script');
+		script.src = '/disgus.js';
+		script.onload = () => { disgusLoaded = true; };
+		document.head.appendChild(script);
+		return () => { script.remove(); };
+	});
+
 	$effect(() => {
 		event;
 		similarArticles = [];
@@ -190,6 +201,17 @@
 					</a>
 				{/each}
 			</div>
+		</section>
+	{/if}
+
+	{#if disgusLoaded}
+		<section class="comments">
+			<h2 class="comments-heading">Comments</h2>
+			<disgus-comments
+				pubkey={event.pubkey}
+				relays={$relays.join(',')}
+				event-id={event.id}
+			/>
 		</section>
 	{/if}
 </article>
@@ -398,6 +420,19 @@
 	}
 	.similar-item:hover {
 		border-color: var(--c-accent);
+	}
+	.comments {
+		margin-top: var(--space-2xl);
+		padding-top: var(--space-xl);
+		border-top: 1px solid var(--c-border);
+	}
+	.comments-heading {
+		font-size: 1rem;
+		font-weight: 600;
+		margin-bottom: var(--space-md);
+	}
+	.comments :global(disgus-comments) {
+		display: block;
 	}
 	.similar-title {
 		font-size: 0.875rem;
