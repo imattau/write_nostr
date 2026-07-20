@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { getArticleText } from './embeddings';
 
 describe('getArticleText', () => {
-	it('extracts title and summary from tags', () => {
+	it('extracts title and summary from tags with weighting', () => {
 		const event = {
 			id: 'test1',
 			kind: 30023,
@@ -16,9 +16,15 @@ describe('getArticleText', () => {
 		} as any;
 
 		const text = getArticleText(event);
+		// title weighted 3x, summary weighted 2x
 		expect(text).toContain('My Article');
 		expect(text).toContain('A brief summary');
 		expect(text).toContain('Hello world');
+		const words = text.split(/\s+/);
+		const titleCount = words.filter(w => w === 'Article').length;
+		const summaryCount = words.filter(w => w === 'summary').length;
+		expect(titleCount).toBe(3);
+		expect(summaryCount).toBe(2);
 	});
 
 	it('strips markdown formatting from content', () => {
@@ -95,6 +101,7 @@ describe('getArticleText', () => {
 		} as any;
 
 		const text = getArticleText(event);
-		expect(text).toBe('Only Title');
+		// title weighted 3x
+		expect(text).toBe('Only Title Only Title Only Title');
 	});
 });

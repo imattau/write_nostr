@@ -1,4 +1,4 @@
-import { PolyGraph, IndexedDBAdapter } from '@0xx0lostcause0xx0/polypack';
+import { PolyGraph, BinaryStoreAdapter, HNSWIndex, VectorIndex } from '@0xx0lostcause0xx0/polypack';
 import type { PolyNode } from '@0xx0lostcause0xx0/polypack';
 import type { NostrEvent } from 'nostr-tools';
 import type { NostrProfile } from '$lib/nostr/profiles';
@@ -28,8 +28,14 @@ async function getGraph(): Promise<PolyGraph> {
 	if (!isBrowser()) throw new Error('PolyGraph unavailable server-side');
 	if (!_initPromise) {
 		_initPromise = (async () => {
-			const adapter = new IndexedDBAdapter({ name: 'write-nostr-poly', version: 2 });
-			_graph = new PolyGraph(adapter, MAX_NODES);
+			const adapter = new BinaryStoreAdapter({ storeDir: 'write-nostr-poly' });
+			_graph = new PolyGraph(
+				adapter,
+				MAX_NODES,
+				undefined,
+				undefined,
+				(onChange) => new HNSWIndex(onChange) as unknown as VectorIndex,
+			);
 			try {
 				await _graph.warm();
 			} catch {
@@ -177,6 +183,21 @@ export async function removeNodesByPubkey(pubkey: string): Promise<void> {
 }
 
 // ── Vector search ───────────────────────────────────────────────
+
+export async function searchEventsByText(
+	text: string,
+	threshold?: number,
+	topK?: number
+): Promise<NostrEvent[]> {
+	if (!isBrowser()) return [];
+	const graph = await getGraph();
+	const q = await graph.queryText(text, threshold, topK);
+	return q
+		.whereNodeType('event')
+		.whereAttribute('kind', 30023)
+		.toArray()
+		.map(nodeToEvent);
+}
 
 export async function indexEventVector(
 	eventId: string,

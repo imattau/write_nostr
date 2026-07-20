@@ -1,4 +1,4 @@
-import { FeatureHashEmbedding } from '@0xx0lostcause0xx0/polypack';
+import { FeatureHashEmbedding, buildEmbeddingText } from '@0xx0lostcause0xx0/polypack';
 import type { NostrEvent } from 'nostr-tools';
 
 const DIMS = 384;
@@ -10,9 +10,10 @@ export async function getEmbedding(text: string): Promise<Float64Array> {
 }
 
 export function getArticleText(event: NostrEvent): string {
-	const title = event.tags.find(([k]) => k === 'title')?.[1] || '';
-	const summary = event.tags.find(([k]) => k === 'summary')?.[1] || '';
-	const content = event.content || '';
-	const plain = content.replace(/<[^>]+>/g, '').replace(/[#*_~`>|\\-]+/g, ' ').replace(/\n+/g, ' ').trim();
-	return [title, summary, plain.slice(0, 2000)].filter(Boolean).join(' ');
+	const content = (event.content || '').replace(/<[^>]+>/g, '').replace(/[#*_~`>|\\-]+/g, ' ').replace(/\n+/g, ' ').trim();
+	return buildEmbeddingText({
+		title: event.tags.find(([k]) => k === 'title')?.[1] || '',
+		summary: event.tags.find(([k]) => k === 'summary')?.[1] || '',
+		content: content.slice(0, 2000),
+	}, { title: 3, summary: 2 });
 }
