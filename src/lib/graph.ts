@@ -1,4 +1,5 @@
-import { PolyGraph, BinaryStoreAdapter, HNSWIndex, VectorIndex } from '@0xx0lostcause0xx0/polypack';
+import { PolyGraph, HNSWIndex, VectorIndex } from '@0xx0lostcause0xx0/polypack';
+import { BinaryStoreAdapter } from '@0xx0lostcause0xx0/polypack/persistence/opfs';
 import type { PolyNode } from '@0xx0lostcause0xx0/polypack';
 import type { NostrEvent } from 'nostr-tools';
 import type { NostrProfile } from '$lib/nostr/profiles';

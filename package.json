@@ -45,6 +45,9 @@
 	"publishConfig": {
 		"access": "public"
 	},
+	"overrides": {
+		"cookie": "^0.7.2"
+	},
 	"scripts": {
 		"dev": "vite dev",
 		"build": "vite build",
@@ -61,18 +64,18 @@
 	},
 	"devDependencies": {
 		"@sveltejs/adapter-auto": "^7.0.1",
-		"@sveltejs/kit": "^2.63.0",
+		"@sveltejs/kit": "^2.70.2",
 		"@sveltejs/vite-plugin-svelte": "^7.1.2",
 		"@tauri-apps/cli": "^2.11.4",
 		"svelte": "^5.56.1",
 		"svelte-check": "^4.6.0",
 		"typescript": "^6.0.3",
-		"vite": "^8.0.16",
+		"vite": "^8.2.0",
 		"vitest": "^4.1.9"
 	},
 	"dependencies": {
 		"@0xx0lostcause0xx0/disgus": "^0.1.6",
-		"@0xx0lostcause0xx0/polypack": "^2.3.0",
+		"@0xx0lostcause0xx0/polypack": "^2.4.0",
 		"@noble/hashes": "^1.8.0",
 		"@scure/base": "^1.2.5",
 		"@sveltejs/adapter-static": "^3.0.10",
