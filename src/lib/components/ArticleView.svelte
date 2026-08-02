@@ -6,7 +6,7 @@
 	import { profileCache, requestProfiles, displayName } from '$lib/stores/profiles';
 	import type { NostrProfile } from '$lib/nostr/profiles';
 	import { relays } from '$lib/stores/relays';
-	import { findRelatedEvents } from '$lib/graph';
+	import { findRelatedEvents, spreadFromEvent, effectiveScore, bumpEventAttention, reinforceEvent, EDGE } from '$lib/graph';
 	import TranslateButton from '$lib/components/TranslateButton.svelte';
 	import InteractionButtons from '$lib/components/InteractionButtons.svelte';
 	import { pubkey } from '$lib/stores/auth';
@@ -42,6 +42,48 @@
 	let similarArticles = $state<NostrEvent[]>([]);
 	let similarLoading = $state(false);
 
+	// Adaptive memory — track reading as a durable activation signal
+	let readReinforced = $state(false);
+	let contentEl = $state<HTMLElement | null>(null);
+
+	$effect(() => {
+		if (!event?.id) return;
+		readReinforced = false;
+		bumpEventAttention(event.id, 0.15).catch(() => {});
+	});
+
+	$effect(() => {
+		const ev = event;
+		if (!ev?.id || readReinforced) return;
+		let done = false;
+		const finish = () => {
+			if (done) return;
+			done = true;
+			readReinforced = true;
+			reinforceEvent(ev.id, 1.0, 'read').catch(() => {});
+		};
+		const timer = setTimeout(finish, 25_000);
+		let observer: IntersectionObserver | null = null;
+		if (contentEl && typeof IntersectionObserver !== 'undefined') {
+			observer = new IntersectionObserver(
+				(entries) => {
+					for (const entry of entries) {
+						if (entry.intersectionRatio >= 0.7) {
+							finish();
+							break;
+						}
+					}
+				},
+				{ threshold: [0.7] }
+			);
+			observer.observe(contentEl);
+		}
+		return () => {
+			clearTimeout(timer);
+			observer?.disconnect();
+		};
+	});
+
 	let disgusLoaded = $state(false);
 
 	$effect(() => {
@@ -59,7 +101,16 @@
 		if (event?.id) {
 			similarLoading = true;
 			findRelatedEvents(event.id, 0.2, 5)
-				.then((articles) => { similarArticles = articles; })
+				.then(async (articles) => {
+					// Re-rank by activation neighborhood: spread along topic edges,
+					// tiebroken by effective score.
+					const spread = await spreadFromEvent(event.id, { depth: 1, edgeTypes: [EDGE.TAGGED] });
+					const scored = await Promise.all(
+						articles.map(async (a) => ({ a, spread: spread.get(a.id) ?? 0, eff: await effectiveScore(a.id) }))
+					);
+					scored.sort((x, y) => y.spread + y.eff - (x.spread + x.eff));
+					similarArticles = scored.map((s) => s.a);
+				})
 				.catch(() => {})
 				.finally(() => { similarLoading = false; });
 		}
@@ -186,7 +237,7 @@
 
 	<TranslateButton {event} onTranslated={(t) => (translation = t)} />
 
-	<div class="content">
+	<div class="content" bind:this={contentEl}>
 		{@html renderedContentHtml}
 	</div>
 

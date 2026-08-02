@@ -10,12 +10,12 @@
 		fetchFollowList,
 		fetchOlderArticles
 	} from '$lib/nostr/fetch';
-	import { getAllEventsByKind, TTL, rankEventsByCentroid, indexEventVector } from '$lib/graph';
+	import { getAllEventsByKind, TTL, rankEventsByCentroid, indexEventVector, topActivatedEvents } from '$lib/graph';
 	import { getEmbedding, getArticleText } from '$lib/embeddings';
 	import ArticleCard from '$lib/components/ArticleCard.svelte';
 	import SemanticSearch from '$lib/components/SemanticSearch.svelte';
 
-	type FeedMode = 'all' | 'circle' | 'top';
+	type FeedMode = 'all' | 'circle' | 'top' | 'foryou';
 
 	let mode = $state<FeedMode>('all');
 	let articles = $state<NostrEvent[]>([]);
@@ -131,6 +131,16 @@
 				articles = ranked.map((id) => pool.find((a) => a.id === id)!).filter(Boolean);
 				scoringLoading = false;
 				return;
+			} else if (nextMode === 'foryou') {
+				// Personalized feed: activated (read/liked/boosted/zapped) articles
+				// first, then a fresh recency pool to fill in the rest.
+				const pool = await fetchArticles(relayList, { limit: 100, skipCache: force });
+				articles = pool;
+				loading = false;
+				const activated = await topActivatedEvents(50);
+				const activatedIds = new Set(activated.map((a) => a.id));
+				articles = [...activated, ...pool.filter((a) => !activatedIds.has(a.id))];
+				return;
 			}
 		} catch (e) {
 			error = 'Failed to load articles. Check your relays.';
@@ -222,6 +232,19 @@
 					</svg>
 					Top Articles
 				</button>
+				<button
+					class="tab"
+					class:active={mode === 'foryou'}
+					onclick={() => load('foryou')}
+					disabled={loading}
+					aria-pressed={mode === 'foryou'}
+					title="Personalized by what you read, like, boost, and zap"
+				>
+					<svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+						<path d="M8 2a6 6 0 1 0 0 12A6 6 0 0 0 8 2zm3.5 7H8a.5.5 0 0 1-.5-.5V5h1v3h3v1z"/>
+					</svg>
+					For You
+				</button>
 			</div>
 			{#if tagFilter}
 				<div class="tag-filter-chip">
@@ -259,7 +282,7 @@
 
 	{#if loading}
 		<p class="loading">
-			{mode === 'circle' ? 'Fetching your follows…' : mode === 'top' ? 'Fetching articles…' : 'Loading articles from relays…'}
+			{mode === 'circle' ? 'Fetching your follows…' : mode === 'top' ? 'Fetching articles…' : mode === 'foryou' ? 'Building your feed…' : 'Loading articles from relays…'}
 		</p>
 	{:else if articles.length === 0}
 		<p class="empty">No articles found. Try adding more relays in Settings.</p>
@@ -282,7 +305,7 @@
 				{/each}
 			</div>
 		{/if}
-		{#if mode !== 'top'}
+		{#if mode !== 'top' && mode !== 'foryou'}
 			<div class="load-more-wrap">
 				<button
 					class="load-more-btn"

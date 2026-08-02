@@ -7,6 +7,7 @@
 	import { nwc } from '$lib/stores/nwc';
 import { profileCache } from '$lib/stores/profiles';
 import { publishLike, publishBoost } from '$lib/nostr/publish';
+import { reinforceEvent } from '$lib/graph';
 
 	let { event }: { event: NostrEvent } = $props();
 
@@ -76,7 +77,10 @@ import { publishLike, publishBoost } from '$lib/nostr/publish';
 			const signer = $auth;
 			if (!signer) return;
 			const result = await publishLike(event, !liked, signer, get(relays));
-			if (result.success) liked = !liked;
+			if (result.success) {
+				liked = !liked;
+				if (liked) reinforceEvent(event.id, 1.0, 'like').catch(() => {});
+			}
 		} finally {
 			likeLoading = false;
 		}
@@ -89,7 +93,10 @@ import { publishLike, publishBoost } from '$lib/nostr/publish';
 			const signer = $auth;
 			if (!signer) return;
 			const result = await publishBoost(event, signer, get(relays));
-			if (result.success) boosted = true;
+			if (result.success) {
+				boosted = true;
+				reinforceEvent(event.id, 1.5, 'boost').catch(() => {});
+			}
 		} finally {
 			boostLoading = false;
 		}
@@ -181,6 +188,7 @@ import { publishLike, publishBoost } from '$lib/nostr/publish';
 			}
 			await nwc.payInvoice(cbBody.pr);
 			zapSuccess = true;
+			reinforceEvent(event.id, 2.0, 'zap').catch(() => {});
 			setTimeout(() => {
 				showZapPopover = false;
 				zapSuccess = false;

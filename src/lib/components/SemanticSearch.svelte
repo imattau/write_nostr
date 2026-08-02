@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { NostrEvent } from 'nostr-tools';
 	import { getEmbedding } from '$lib/embeddings';
-	import { searchSimilarEvents } from '$lib/graph';
+	import { searchSimilarEvents, absorbSearch } from '$lib/graph';
 	import ArticleCard from '$lib/components/ArticleCard.svelte';
 	import { relays } from '$lib/stores/relays';
 	import { blocks } from '$lib/stores/social';
@@ -24,6 +24,12 @@
 		try {
 			const vector = await getEmbedding(q);
 			results = await searchSimilarEvents(Array.from(vector), 0.15, 20);
+			// Warm the topic region and re-rank by activation composite
+			absorbSearch(q).then((scores) => {
+				if (!scores.size) return;
+				const ranked = [...results].sort((a, b) => (scores.get(b.id) ?? 0) - (scores.get(a.id) ?? 0));
+				results = ranked;
+			}).catch(() => {});
 		} catch (e) {
 			error = 'Search failed. The AI model may still be downloading.';
 			console.warn('[semantic search]', e);

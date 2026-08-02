@@ -1,8 +1,9 @@
-import { PolyGraph, HNSWIndex, VectorIndex } from '@0xx0lostcause0xx0/polypack';
+import { PolyGraph, HNSWIndex, ActivationEngine, defineEdges } from '@0xx0lostcause0xx0/polypack';
 import { BinaryStoreAdapter } from '@0xx0lostcause0xx0/polypack/persistence/opfs';
 import type { PolyNode } from '@0xx0lostcause0xx0/polypack';
 import type { NostrEvent } from 'nostr-tools';
 import type { NostrProfile } from '$lib/nostr/profiles';
+import { extractNostrPubkeys } from '$lib/utils/markdown';
 
 export const TTL = {
 	articles: 60 * 60 * 1000,
@@ -12,9 +13,22 @@ export const TTL = {
 } as const;
 
 const MAX_NODES = 2500;
+const MAX_TAGGED_EDGES = 6;
+const MAX_MENTION_EDGES = 10;
+
+/** Edge types linking event nodes to topics, authors, and mentioned pubkeys. */
+export const EDGE = defineEdges({
+	TAGGED: 'tagged',
+	AUTHORS: 'authors',
+	MENTIONS: 'mentions'
+});
+
+/** Decayed activation score a node must have to survive TTL pruning. */
+export const MIN_ACTIVATION_KEEP = 0.05;
 
 let _graph: PolyGraph | null = null;
 let _initPromise: Promise<void> | null = null;
+let _engine: ActivationEngine | null = null;
 
 function isStale(cachedAt: number, ttl: number): boolean {
 	return Date.now() - cachedAt > ttl;
@@ -35,7 +49,7 @@ async function getGraph(): Promise<PolyGraph> {
 				MAX_NODES,
 				undefined,
 				undefined,
-				(onChange) => new HNSWIndex(onChange) as unknown as VectorIndex,
+				(onChange) => new HNSWIndex(onChange),
 			);
 			try {
 				await _graph.warm();
@@ -48,6 +62,13 @@ async function getGraph(): Promise<PolyGraph> {
 	return _graph!;
 }
 
+async function getEngine(): Promise<ActivationEngine> {
+	if (_engine) return _engine;
+	const graph = await getGraph();
+	_engine = new ActivationEngine(graph);
+	return _engine;
+}
+
 function nodeToEvent(node: PolyNode): NostrEvent {
 	return node.data.event as NostrEvent;
 }
@@ -57,6 +78,7 @@ export async function putEvents(events: NostrEvent[], groupKey: string): Promise
 	const graph = await getGraph();
 	const now = Date.now();
 	for (const event of events) {
+		const existing = graph.getNode(event.id);
 		graph.addNode({
 			id: event.id,
 			type: 'event',
@@ -68,9 +90,39 @@ export async function putEvents(events: NostrEvent[], groupKey: string): Promise
 				cachedAt: now,
 				event
 			},
+			// addNode replaces the node wholesale — carry activation forward so
+			// re-fetches don't wipe learned state.
+			activation: existing?.activation,
 			insertedAt: now,
 			updatedAt: now
 		});
+		if (event.kind !== 30023) continue;
+
+		const tags = event.tags
+			.filter(([k]) => k === 't')
+			.map(([, v]) => v?.toLowerCase().trim())
+			.filter(Boolean)
+			.slice(0, MAX_TAGGED_EDGES);
+		for (const tag of tags) {
+			const topicId = `t:${tag}`;
+			graph.addNode({
+				id: topicId,
+				type: 'topic',
+				data: { tag, cachedAt: now },
+				insertedAt: now,
+				updatedAt: now
+			});
+			// Both directions so spreading activation can travel through topic
+			// hubs (article -> topic -> sibling article).
+			graph.addEdge(event.id, EDGE.TAGGED, topicId, { tag });
+			graph.addEdge(topicId, EDGE.TAGGED, event.id, { tag });
+		}
+		graph.addEdge(event.id, EDGE.AUTHORS, event.pubkey);
+		graph.addEdge(event.pubkey, EDGE.AUTHORS, event.id);
+		for (const pk of extractNostrPubkeys(event.content).slice(0, MAX_MENTION_EDGES)) {
+			graph.addEdge(event.id, EDGE.MENTIONS, pk);
+			graph.addEdge(pk, EDGE.MENTIONS, event.id);
+		}
 	}
 }
 
@@ -157,7 +209,14 @@ export async function pruneStaleCache(): Promise<void> {
 		} else if (node.type === 'event') {
 			const gk = node.data.groupKey as string;
 			ttl = gk?.startsWith('followlist') ? TTL.followList : TTL.articles;
+		} else if (node.type === 'topic') {
+			ttl = TTL.articles;
 		} else {
+			continue;
+		}
+		// Activated nodes are durable knowledge — don't evict them just
+		// because their cache TTL lapsed.
+		if (node.type !== 'topic' && graph.getActivation(node.id) >= MIN_ACTIVATION_KEEP) {
 			continue;
 		}
 		if (now - (node.data.cachedAt as number) > ttl) {
@@ -273,4 +332,64 @@ export async function findRelatedEvents(
 		.filter((n) => n.id !== eventId)
 		.slice(0, topK ?? 6)
 		.map(nodeToEvent);
+}
+
+// ── Activation (adaptive memory) ────────────────────────────────
+
+/** Durable reinforcement of a loaded event node. No-op if the node isn't loaded. */
+export async function reinforceEvent(
+	id: string,
+	amount: number,
+	reason?: string
+): Promise<void> {
+	if (!isBrowser()) return;
+	const engine = await getEngine();
+	engine.reinforce(id, amount, reason);
+}
+
+/** Transient, local-only attention — never persisted or synced. */
+export async function bumpEventAttention(id: string, amount: number): Promise<void> {
+	if (!isBrowser()) return;
+	const engine = await getEngine();
+	engine.bumpAttention(id, amount);
+}
+
+/** Durable decayed score plus transient attention for a node. */
+export async function effectiveScore(id: string): Promise<number> {
+	if (!isBrowser()) return 0;
+	const engine = await getEngine();
+	return engine.effective(id);
+}
+
+/** Loaded article nodes ranked by effective activation descending. */
+export async function topActivatedEvents(limit = 50, minScore = 0): Promise<NostrEvent[]> {
+	if (!isBrowser()) return [];
+	const engine = await getEngine();
+	return engine.workingMemory(limit, minScore)
+		.filter((n) => n.type === 'event' && n.data.kind === 30023)
+		.map(nodeToEvent);
+}
+
+/**
+ * Semantic region scoring with reinforcement: nodes whose composite score
+ * clears the absorb threshold receive durable reinforcement. Returns
+ * `{ nodeId: composite }` ranked descending for the loaded region.
+ */
+export async function absorbSearch(
+	text: string,
+	options?: { threshold?: number; topK?: number; semanticThreshold?: number }
+): Promise<Map<string, number>> {
+	if (!isBrowser()) return new Map();
+	const engine = await getEngine();
+	return engine.absorb(text, options);
+}
+
+/** Spreading activation outward from `eventId` across its edges. */
+export async function spreadFromEvent(
+	eventId: string,
+	options?: { depth?: number; decay?: number; edgeTypes?: string[] }
+): Promise<Map<string, number>> {
+	if (!isBrowser()) return new Map();
+	const engine = await getEngine();
+	return engine.spread([eventId], options);
 }

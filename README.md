@@ -86,6 +86,7 @@ write_nostr uses [PolyGraph](https://github.com/anomalyco/polypack) (`@0xx0lostc
 
 - **Vector search** — Articles are indexed by embedding vector, enabling similarity-based related-article recommendations and centroid-based ranking.
 - **Event & profile caching** — Kind:30023 articles, follow lists, relay lists, and kind:0 profiles are cached locally to reduce relay round-trips.
+- **Adaptive memory (activation)** — Reading, liking, boosting, zapping, and searching durably reinforce article nodes; edges link articles to their topics (`tagged`), author (`authors`), and mentioned pubkeys (`mentions`). A personalized **For You** feed ranks by activation, semantic search "absorbs" the query region, and similar articles are re-ranked by spreading activation.
 
 ### Configuration
 
