@@ -141,3 +141,48 @@ describe('PolyGraph vector search', () => {
 		expect(results[0].id).toBe('ev-0');
 	});
 });
+
+describe('removeNodesByPubkey purges persisted (evicted) nodes', () => {
+	it('removes the author across loaded and evicted nodes', async () => {
+		// Tiny hot cache forces most nodes to be evicted from memory while
+		// remaining persisted in the adapter — the regression this fixes.
+		const graph = new PolyGraph(new MemoryAdapter(1000), 3);
+		const now = Date.now();
+		for (let i = 0; i < 6; i++) {
+			for (const pk of ['pk-A', 'pk-B']) {
+				graph.addNode({
+					id: `${pk}-ev-${i}`,
+					type: 'event',
+					data: { pubkey: pk, event: {} },
+					insertedAt: now,
+					updatedAt: now
+				});
+			}
+		}
+		await graph.flush();
+
+		// All of pk-A's events are discoverable via the persisted query, even
+		// though most are no longer in the hot cache.
+		const ids = await graph.queryPersisted()
+			.whereNodeType('event')
+			.whereAttribute('pubkey', 'pk-A')
+			.ids();
+		expect(ids).toHaveLength(6);
+
+		for (const id of ids) await graph.removeNodeSafe(id);
+		await graph.removeNodeSafe('pk-A');
+		await graph.flush();
+
+		const remainingA = await graph.queryPersisted()
+			.whereNodeType('event')
+			.whereAttribute('pubkey', 'pk-A')
+			.ids();
+		expect(remainingA).toHaveLength(0);
+
+		const countB = await graph.queryPersisted()
+			.whereNodeType('event')
+			.whereAttribute('pubkey', 'pk-B')
+			.count();
+		expect(countB).toBe(6);
+	});
+});

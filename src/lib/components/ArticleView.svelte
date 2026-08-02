@@ -6,6 +6,7 @@
 	import { profileCache, requestProfiles, displayName } from '$lib/stores/profiles';
 	import type { NostrProfile } from '$lib/nostr/profiles';
 	import { relays } from '$lib/stores/relays';
+	import { blocks } from '$lib/stores/social';
 	import { findRelatedEvents, spreadFromEvent, effectiveScore, bumpEventAttention, reinforceEvent, EDGE } from '$lib/graph';
 	import TranslateButton from '$lib/components/TranslateButton.svelte';
 	import InteractionButtons from '$lib/components/InteractionButtons.svelte';
@@ -103,10 +104,12 @@
 			findRelatedEvents(event.id, 0.2, 5)
 				.then(async (articles) => {
 					// Re-rank by activation neighborhood: spread along topic edges,
-					// tiebroken by effective score.
+					// tiebroken by effective score. Blocked authors are excluded.
 					const spread = await spreadFromEvent(event.id, { depth: 1, edgeTypes: [EDGE.TAGGED] });
 					const scored = await Promise.all(
-						articles.map(async (a) => ({ a, spread: spread.get(a.id) ?? 0, eff: await effectiveScore(a.id) }))
+						articles
+							.filter((a) => !$blocks.has(a.pubkey))
+							.map(async (a) => ({ a, spread: spread.get(a.id) ?? 0, eff: await effectiveScore(a.id) }))
 					);
 					scored.sort((x, y) => y.spread + y.eff - (x.spread + x.eff));
 					similarArticles = scored.map((s) => s.a);

@@ -26,6 +26,17 @@ export const EDGE = defineEdges({
 /** Decayed activation score a node must have to survive TTL pruning. */
 export const MIN_ACTIVATION_KEEP = 0.05;
 
+/** Pubkeys whose articles must not accrue activation nor appear in activation rankings. */
+let _blockedPubkeys = new Set<string>();
+
+export function setBlockedPubkeys(pubkeys: Iterable<string>): void {
+	_blockedPubkeys = new Set(pubkeys);
+}
+
+function isBlocked(node: PolyNode): boolean {
+	return node.type === 'event' && _blockedPubkeys.has(node.data.pubkey as string);
+}
+
 let _graph: PolyGraph | null = null;
 let _initPromise: Promise<void> | null = null;
 let _engine: ActivationEngine | null = null;
@@ -233,13 +244,20 @@ export async function pruneStaleCache(): Promise<void> {
 export async function removeNodesByPubkey(pubkey: string): Promise<void> {
 	if (!isBrowser()) return;
 	const graph = await getGraph();
-	const eventIds = graph.query()
+	// Persist pending writes so the adapter snapshot is authoritative (covers
+	// loaded-dirty and evicted-dirty nodes), then enumerate across the store.
+	await graph.flush();
+	const eventIds = await graph.queryPersisted()
 		.whereNodeType('event')
 		.whereAttribute('pubkey', pubkey)
 		.ids();
-	for (const id of eventIds) graph.removeNode(id);
-	const profileNode = graph.getNode(pubkey);
-	if (profileNode?.type === 'profile') graph.removeNode(pubkey);
+	for (const id of eventIds) {
+		await graph.removeNodeSafe(id);
+	}
+	await graph.removeNodeSafe(pubkey);
+	// Persist the removals immediately so the purge is durable, not left to the
+	// debounced writer.
+	await graph.flush();
 }
 
 // ── Vector search ───────────────────────────────────────────────
@@ -336,7 +354,7 @@ export async function findRelatedEvents(
 
 // ── Activation (adaptive memory) ────────────────────────────────
 
-/** Durable reinforcement of a loaded event node. No-op if the node isn't loaded. */
+/** Durable reinforcement of a loaded event node. No-op if the node isn't loaded or its author is blocked. */
 export async function reinforceEvent(
 	id: string,
 	amount: number,
@@ -344,13 +362,17 @@ export async function reinforceEvent(
 ): Promise<void> {
 	if (!isBrowser()) return;
 	const engine = await getEngine();
+	const node = engine.graph.getNode(id);
+	if (!node || isBlocked(node)) return;
 	engine.reinforce(id, amount, reason);
 }
 
-/** Transient, local-only attention — never persisted or synced. */
+/** Transient, local-only attention — never persisted or synced. Suppressed for blocked authors. */
 export async function bumpEventAttention(id: string, amount: number): Promise<void> {
 	if (!isBrowser()) return;
 	const engine = await getEngine();
+	const node = engine.graph.getNode(id);
+	if (!node || isBlocked(node)) return;
 	engine.bumpAttention(id, amount);
 }
 
@@ -361,19 +383,20 @@ export async function effectiveScore(id: string): Promise<number> {
 	return engine.effective(id);
 }
 
-/** Loaded article nodes ranked by effective activation descending. */
+/** Loaded article nodes ranked by effective activation descending, excluding blocked authors. */
 export async function topActivatedEvents(limit = 50, minScore = 0): Promise<NostrEvent[]> {
 	if (!isBrowser()) return [];
 	const engine = await getEngine();
 	return engine.workingMemory(limit, minScore)
-		.filter((n) => n.type === 'event' && n.data.kind === 30023)
+		.filter((n) => n.type === 'event' && n.data.kind === 30023 && !isBlocked(n))
 		.map(nodeToEvent);
 }
 
 /**
  * Semantic region scoring with reinforcement: nodes whose composite score
- * clears the absorb threshold receive durable reinforcement. Returns
- * `{ nodeId: composite }` ranked descending for the loaded region.
+ * clears the absorb threshold receive durable reinforcement (blocked authors
+ * are never reinforced). Returns `{ nodeId: composite }` ranked descending for
+ * the loaded region, minus blocked authors.
  */
 export async function absorbSearch(
 	text: string,
@@ -381,7 +404,19 @@ export async function absorbSearch(
 ): Promise<Map<string, number>> {
 	if (!isBrowser()) return new Map();
 	const engine = await getEngine();
-	return engine.absorb(text, options);
+	const scores = await engine.pulse(text, options);
+	const entries: { id: string; amount: number; reason: string }[] = [];
+	for (const [id, score] of scores) {
+		if (score < engine.config.absorbThreshold) continue;
+		const node = engine.graph.getNode(id);
+		if (!node || isBlocked(node)) {
+			scores.delete(id);
+			continue;
+		}
+		entries.push({ id, amount: Math.min(1, engine.config.absorbGain * score), reason: 'pulse' });
+	}
+	engine.reinforceAll(entries);
+	return scores;
 }
 
 /** Spreading activation outward from `eventId` across its edges. */

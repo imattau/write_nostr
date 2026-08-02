@@ -4,7 +4,7 @@ import type { NostrEvent } from 'nostr-tools';
 import { auth } from '$lib/stores/auth';
 import { relays } from '$lib/stores/relays';
 import { loadList, saveList, type ListEntry } from '$lib/nostr/lists';
-import { removeNodesByPubkey } from '$lib/graph';
+import { removeNodesByPubkey, setBlockedPubkeys } from '$lib/graph';
 
 // ── Internal state ─────────────────────────────────────────────────────────
 
@@ -22,6 +22,9 @@ export const follows = derived(followedPubkeys, ($f) => $f);
 
 /** All muted pubkeys (public + private) as a Set, for quick membership checks. */
 export const blocks = derived(blockedListEntries, ($entries) => new Set($entries.map((e) => e.tag[1])));
+
+// Suppress activation for muted authors: no reinforcement, no ranking slots.
+blocks.subscribe((s) => setBlockedPubkeys(s));
 
 /** Mute-list entries with their privacy flag, for list-management UI. */
 export const blockedEntries = derived(blockedListEntries, ($e) => $e);
