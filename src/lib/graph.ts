@@ -224,6 +224,17 @@ export async function getAllEventsByKind(
 		.map(nodeToEvent);
 }
 
+/** Read all persisted events of a kind without loading the whole result set into the hot cache. */
+export async function getPersistedEventsByKind(kind: number): Promise<NostrEvent[]> {
+	if (!isBrowser()) return [];
+	const graph = await getGraph();
+	const nodes = await graph.queryPersisted()
+		.whereNodeType('event')
+		.whereAttribute('kind', kind)
+		.toArray();
+	return nodes.map(nodeToEvent);
+}
+
 export async function putProfiles(profiles: Map<string, NostrProfile | null>): Promise<void> {
 	if (!isBrowser()) return;
 	const graph = await getGraph();
@@ -331,13 +342,14 @@ export async function searchEventsByText(
 
 export async function indexEventVector(
 	eventId: string,
-	vector: Float64Array
+	vector: Float64Array,
+	metadata?: { embeddingVersion: string; embeddingTextHash: string }
 ): Promise<void> {
 	if (!isBrowser()) return;
 	const graph = await getGraph();
-	const node = graph.getNode(eventId);
+	const node = await graph.getNodeSafe(eventId);
 	if (!node) return;
-	graph.updateNode(eventId, {}, vector);
+	graph.updateNode(eventId, metadata ? { ...metadata } : {}, vector);
 }
 
 export async function searchSimilarEvents(

@@ -14,6 +14,12 @@
 		auth.init().catch((e) => console.warn('[auth] init failed:', e));
 		// Clean up stale IndexedDB records in the background — non-blocking
 		pruneStaleCache().catch(() => {});
+		// FeatureHashEmbedding is available immediately. Upgrade to a local
+		// transformer in a Worker when the browser can load one; failures keep
+		// the baseline search path intact.
+		import('$lib/browserEmbedding')
+			.then(({ enableBrowserSemanticEmbeddings }) => enableBrowserSemanticEmbeddings())
+			.catch((error) => console.warn('[embeddings] enhancement unavailable:', error));
 
 		if (browser && !dev && 'serviceWorker' in navigator) {
 			navigator.serviceWorker.register('/sw.js').catch((error) => {

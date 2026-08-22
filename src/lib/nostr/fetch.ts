@@ -13,7 +13,7 @@
 import { SimplePool } from 'nostr-tools';
 import type { NostrEvent, Filter } from 'nostr-tools';
 import { getEvents, putEvents, getEvent, indexEventVector, TTL } from '$lib/graph';
-import { getEmbedding, getArticleText } from '$lib/embeddings';
+import { embeddingTextHash, getEmbeddingProvider, getArticleText } from '$lib/embeddings';
 
 let pool: SimplePool;
 
@@ -35,8 +35,14 @@ async function embedAndIndexArticles(articles: NostrEvent[]): Promise<void> {
 			fresh.map(async (a) => {
 				const text = getArticleText(a);
 				if (!text) return;
-				const vector = await getEmbedding(text);
-				await indexEventVector(a.id, vector);
+				const provider = getEmbeddingProvider();
+				// Keep the provider/version paired if the browser model becomes
+				// ready while a relay batch is still being embedded.
+				const vector = await provider.embed(text);
+				await indexEventVector(a.id, vector, {
+					embeddingVersion: provider.version,
+					embeddingTextHash: embeddingTextHash(text)
+				});
 			})
 		);
 	} finally {
