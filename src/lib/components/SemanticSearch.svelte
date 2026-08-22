@@ -1,7 +1,6 @@
 <script lang="ts">
 	import type { NostrEvent } from 'nostr-tools';
-	import { getEmbedding } from '$lib/embeddings';
-	import { searchSimilarEvents, absorbSearch } from '$lib/graph';
+	import { searchEventsByText, absorbSearch } from '$lib/graph';
 	import ArticleCard from '$lib/components/ArticleCard.svelte';
 	import { relays } from '$lib/stores/relays';
 	import { blocks } from '$lib/stores/social';
@@ -22,8 +21,9 @@
 		error = '';
 		results = [];
 		try {
-			const vector = await getEmbedding(q);
-			results = await searchSimilarEvents(Array.from(vector), 0.15, 20);
+			// Search the complete persisted Polypack graph, including articles
+			// outside the current hot cache.
+			results = await searchEventsByText(q, 0.15, 20);
 			// Warm the topic region and re-rank by activation composite
 			absorbSearch(q).then((scores) => {
 				if (!scores.size) return;

@@ -1,6 +1,6 @@
-import { PolyGraph, HNSWIndex, ActivationEngine, defineEdges } from '@0xx0lostcause0xx0/polypack';
+import { PolyGraph, HNSWIndex, ActivationEngine, defineEdges, edgeId } from '@0xx0lostcause0xx0/polypack';
 import { BinaryStoreAdapter } from '@0xx0lostcause0xx0/polypack/persistence/opfs';
-import type { PolyNode } from '@0xx0lostcause0xx0/polypack';
+import type { PolyNode, PolyEdge } from '@0xx0lostcause0xx0/polypack';
 import type { NostrEvent } from 'nostr-tools';
 import type { NostrProfile } from '$lib/nostr/profiles';
 import { extractNostrPubkeys } from '$lib/utils/markdown';
@@ -62,6 +62,21 @@ async function getGraph(): Promise<PolyGraph> {
 				undefined,
 				(onChange) => new HNSWIndex(onChange),
 			);
+			// Polypack 3.1: make the local Nostr graph explicit about the kinds
+			// of memory it contains, and index the fields used by cache queries.
+			// These definitions are persisted with the graph and re-applied on
+			// every startup so old stores remain compatible.
+			_graph.registerNodeType('event', {
+				requiredFields: ['kind', 'pubkey', 'cachedAt', 'event'],
+				memoryClass: 'episodic'
+			});
+			_graph.registerNodeType('topic', { requiredFields: ['tag'], memoryClass: 'semantic' });
+			_graph.registerNodeType('profile', { requiredFields: ['pubkey', 'cachedAt'], memoryClass: 'entity' });
+			_graph.defineIndex({ name: 'event-group-key', nodeType: 'event', fields: ['groupKey'], sparse: true });
+			_graph.defineIndex({ name: 'event-kind', nodeType: 'event', fields: ['kind'] });
+			_graph.defineIndex({ name: 'event-pubkey', nodeType: 'event', fields: ['pubkey'] });
+			_graph.defineIndex({ name: 'event-cached-at', nodeType: 'event', fields: ['cachedAt'] });
+			_graph.defineIndex({ name: 'profile-pubkey', nodeType: 'profile', fields: ['pubkey'], unique: true });
 			try {
 				await _graph.warm();
 			} catch {
@@ -88,9 +103,12 @@ export async function putEvents(events: NostrEvent[], groupKey: string): Promise
 	if (!isBrowser()) return;
 	const graph = await getGraph();
 	const now = Date.now();
+	const eventNodes: PolyNode[] = [];
+	const topicNodes = new Map<string, PolyNode>();
+
 	for (const event of events) {
 		const existing = graph.getNode(event.id);
-		graph.addNode({
+		eventNodes.push({
 			id: event.id,
 			type: 'event',
 			data: {
@@ -101,6 +119,7 @@ export async function putEvents(events: NostrEvent[], groupKey: string): Promise
 				cachedAt: now,
 				event
 			},
+			memoryClass: 'episodic',
 			// addNode replaces the node wholesale — carry activation forward so
 			// re-fetches don't wipe learned state.
 			activation: existing?.activation,
@@ -116,25 +135,53 @@ export async function putEvents(events: NostrEvent[], groupKey: string): Promise
 			.slice(0, MAX_TAGGED_EDGES);
 		for (const tag of tags) {
 			const topicId = `t:${tag}`;
-			graph.addNode({
+			topicNodes.set(topicId, {
 				id: topicId,
 				type: 'topic',
 				data: { tag, cachedAt: now },
+				memoryClass: 'semantic',
 				insertedAt: now,
 				updatedAt: now
 			});
-			// Both directions so spreading activation can travel through topic
-			// hubs (article -> topic -> sibling article).
-			graph.addEdge(event.id, EDGE.TAGGED, topicId, { tag });
-			graph.addEdge(topicId, EDGE.TAGGED, event.id, { tag });
-		}
-		graph.addEdge(event.id, EDGE.AUTHORS, event.pubkey);
-		graph.addEdge(event.pubkey, EDGE.AUTHORS, event.id);
-		for (const pk of extractNostrPubkeys(event.content).slice(0, MAX_MENTION_EDGES)) {
-			graph.addEdge(event.id, EDGE.MENTIONS, pk);
-			graph.addEdge(pk, EDGE.MENTIONS, event.id);
 		}
 	}
+
+	const edges: PolyEdge[] = [];
+	for (const event of events) {
+		if (event.kind !== 30023) continue;
+		const tags = event.tags
+			.filter(([k]) => k === 't')
+			.map(([, v]) => v?.toLowerCase().trim())
+			.filter(Boolean)
+			.slice(0, MAX_TAGGED_EDGES);
+		for (const tag of tags) {
+			const topicId = `t:${tag}`;
+			// Both directions so spreading activation can travel through topic
+			// hubs (article -> topic -> sibling article).
+			edges.push(
+				{ id: edgeId(event.id, EDGE.TAGGED, topicId), source: event.id, type: EDGE.TAGGED, target: topicId, data: { tag }, createdAt: now },
+				{ id: edgeId(topicId, EDGE.TAGGED, event.id), source: topicId, type: EDGE.TAGGED, target: event.id, data: { tag }, createdAt: now }
+			);
+		}
+		edges.push(
+			{ id: edgeId(event.id, EDGE.AUTHORS, event.pubkey), source: event.id, type: EDGE.AUTHORS, target: event.pubkey, createdAt: now },
+			{ id: edgeId(event.pubkey, EDGE.AUTHORS, event.id), source: event.pubkey, type: EDGE.AUTHORS, target: event.id, createdAt: now }
+		);
+		for (const pk of extractNostrPubkeys(event.content).slice(0, MAX_MENTION_EDGES)) {
+			edges.push(
+				{ id: edgeId(event.id, EDGE.MENTIONS, pk), source: event.id, type: EDGE.MENTIONS, target: pk, createdAt: now },
+				{ id: edgeId(pk, EDGE.MENTIONS, event.id), source: pk, type: EDGE.MENTIONS, target: event.id, createdAt: now }
+			);
+		}
+	}
+
+	// Persist the node and edge topology as one logical commit. A failed relay
+	// ingest can therefore not leave half an article graph behind.
+	await graph.transaction((tx) => {
+		for (const node of eventNodes) tx.addNode(node);
+		for (const node of topicNodes.values()) tx.addNode(node);
+		for (const edge of edges) tx.addEdge(edge);
+	});
 }
 
 export async function getEvents(
@@ -181,15 +228,18 @@ export async function putProfiles(profiles: Map<string, NostrProfile | null>): P
 	if (!isBrowser()) return;
 	const graph = await getGraph();
 	const now = Date.now();
+	const nodes: PolyNode[] = [];
 	for (const [pubkey, profile] of profiles) {
-		graph.addNode({
+		nodes.push({
 			id: pubkey,
 			type: 'profile',
 			data: { pubkey, profile, cachedAt: now },
+			memoryClass: 'entity',
 			insertedAt: now,
 			updatedAt: now
 		});
 	}
+	if (nodes.length > 0) graph.addNodes(nodes);
 }
 
 export async function getProfiles(
@@ -269,12 +319,14 @@ export async function searchEventsByText(
 ): Promise<NostrEvent[]> {
 	if (!isBrowser()) return [];
 	const graph = await getGraph();
-	const q = await graph.queryText(text, threshold, topK);
-	return q
+	// Search the complete persisted graph, not only the currently loaded hot
+	// cache. This keeps older articles discoverable after hot-cache eviction.
+	const q = await graph.queryPersistedText(text, threshold, topK);
+	const nodes = await q
 		.whereNodeType('event')
 		.whereAttribute('kind', 30023)
-		.toArray()
-		.map(nodeToEvent);
+		.toArray();
+	return nodes.map(nodeToEvent);
 }
 
 export async function indexEventVector(
@@ -342,11 +394,12 @@ export async function findRelatedEvents(
 	const graph = await getGraph();
 	const node = graph.getNode(eventId);
 	if (!node?.vector) return [];
-	return graph.query()
+	const q = graph.queryPersisted()
 		.whereNodeType('event')
 		.whereAttribute('kind', 30023)
 		.similarTo(Array.from(node.vector), threshold, (topK ?? 6) + 1)
-		.toArray()
+	const nodes = await q.toArray();
+	return nodes
 		.filter((n) => n.id !== eventId)
 		.slice(0, topK ?? 6)
 		.map(nodeToEvent);
@@ -387,8 +440,25 @@ export async function effectiveScore(id: string): Promise<number> {
 export async function topActivatedEvents(limit = 50, minScore = 0): Promise<NostrEvent[]> {
 	if (!isBrowser()) return [];
 	const engine = await getEngine();
-	return engine.workingMemory(limit, minScore)
+	const graph = engine.graph;
+	// Activation ranking must include persisted nodes that are no longer in the
+	// hot cache. Load a bounded candidate set, then let 3.1's working-memory
+	// selector add topic diversity before returning the feed.
+	const candidates = await graph.queryPersisted()
+		.whereNodeType('event')
+		.whereAttribute('kind', 30023)
+		.orderByActivation('desc')
+		.limit(Math.max(limit * 3, 50))
+		.toArray();
+	for (const candidate of candidates) await graph.getNodeSafe(candidate.id);
+	return engine.workingMemory({
+		limit: Math.max(limit * 2, 20),
+		minScore,
+		diversityLambda: 0.3,
+		costOf: (node) => Math.max(1, Math.ceil(String(node.data.event ?? '').length / 4000))
+	})
 		.filter((n) => n.type === 'event' && n.data.kind === 30023 && !isBlocked(n))
+		.slice(0, limit)
 		.map(nodeToEvent);
 }
 
