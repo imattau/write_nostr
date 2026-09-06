@@ -23,6 +23,7 @@ Whether you're a writer looking for a censorship-resistant publishing platform o
 - **Social** — Follow/unfollow and block/unblock authors directly from the feed.
 - **Profiles** — Kind:0 profile metadata fetched from relays, cached for performance.
 - **Translation** — On-device article translation via Chrome's Built-in AI Translation API.
+- **AI Writing Assistant** — Optional Habla-inspired side-panel tools for drafting, rewriting, concision, expansion, and summaries. Configure an OpenAI or Groq API key locally in Settings.
 - **PWA** — Installable as a progressive web app with offline support.
 
 ## Tech Stack
@@ -94,6 +95,10 @@ write_nostr uses [PolyGraph](https://github.com/anomalyco/polypack) (`@0xx0lostc
 ### Configuration
 
 Environment variables: `WRITE_NOSTR_SSH_TARGET`, `WRITE_NOSTR_DOMAIN`, `WRITE_NOSTR_PORT`, etc.
+
+### AI Writing Assistant
+
+The editor includes an optional AI assistant modeled after the writing workflows in [Habla](https://github.com/imattau/habla). It supports OpenAI and Groq OpenAI-compatible chat endpoints. API keys are stored locally in the browser, scoped to the logged-in Nostr account, and are sent directly to the selected provider; they are never published to Nostr. Generated text is shown for review and is never applied or published automatically.
 
 ## Type Checking
 

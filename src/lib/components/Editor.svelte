@@ -2,6 +2,9 @@
 	import { tick, untrack } from 'svelte';
 	import { renderMarkdown } from '$lib/utils/markdown';
 	import { generateId, drafts, type Draft } from '$lib/stores/drafts';
+	import { pubkey } from '$lib/stores/auth';
+	import { getDefaultAIDraftingSettings, loadAIDraftingSettings, type AIDraftAction, type AIDraftingSettings } from '$lib/ai-drafting';
+	import AIDraftingPanel from '$lib/components/AIDraftingPanel.svelte';
 
 	let {
 		draft,
@@ -31,6 +34,31 @@
 	let id = $state(untrack(() => draft?.id || generateId()));
 	let publishedAt = $state(untrack(() => draft?.publishedAt));
 	let contentTextarea = $state<HTMLTextAreaElement | null>(null);
+	let showAI = $state(false);
+	let aiSettings = $state<AIDraftingSettings>(getDefaultAIDraftingSettings());
+	let selectedText = $state('');
+	let aiSelection = $state({ start: 0, end: 0 });
+
+	$effect(() => { aiSettings = loadAIDraftingSettings($pubkey); });
+
+	function openAI() {
+		const textarea = contentTextarea;
+		aiSelection = textarea ? { start: textarea.selectionStart, end: textarea.selectionEnd } : { start: content.length, end: content.length };
+		selectedText = content.slice(aiSelection.start, aiSelection.end);
+		showAI = true;
+	}
+
+	async function applyAI(markdown: string, scoped: boolean, action: AIDraftAction) {
+		if (action === 'summary') {
+			summary = markdown;
+			showMeta = true;
+		} else if (scoped && contentTextarea) {
+			const { start, end } = aiSelection;
+			content = content.slice(0, start) + markdown + content.slice(end);
+		} else if (confirm('Replace the current draft with the generated result?')) content = markdown;
+		else return;
+		autoSave(); showAI = false;
+	}
 
 	let autoSaveTimer: ReturnType<typeof setTimeout>;
 	let justSaved = $state(false);
@@ -170,6 +198,7 @@
 		<button onclick={() => (showMeta = !showMeta)}>
 			Meta
 		</button>
+		<button onclick={openAI}>AI assistant</button>
 		<button class="saved" class:just-saved={justSaved} onclick={saveDraft}>{justSaved ? 'Saved ✓' : 'Save Draft'}</button>
 		<button class="primary" onclick={handlePublish} disabled={!title.trim() || !content.trim()}>
 			Publish
@@ -253,6 +282,9 @@
 			></textarea>
 		{/if}
 	</div>
+	{#if showAI}
+		<AIDraftingPanel settings={aiSettings} {title} {content} {selectedText} onApply={applyAI} onClose={() => (showAI = false)} />
+	{/if}
 </div>
 
 <style>

@@ -2,11 +2,27 @@
 	import { relays, loadingRelays } from '$lib/stores/relays';
 	import { auth, pubkey } from '$lib/stores/auth';
 	import { nwc } from '$lib/stores/nwc';
+	import { DEFAULT_MODELS, getDefaultAIDraftingSettings, loadAIDraftingSettings, PROVIDER_LABELS, saveAIDraftingSettings, type AIProvider, type AIDraftingSettings } from '$lib/ai-drafting';
 
 	let newRelay = $state('');
 	let message = $state('');
 	let nwcInput = $state('');
 	let nwcMessage = $state('');
+	let aiSettings = $state<AIDraftingSettings>(getDefaultAIDraftingSettings());
+	let aiMessage = $state('');
+
+	$effect(() => { aiSettings = loadAIDraftingSettings($pubkey); });
+
+	function saveAI() {
+		if (!$pubkey) { aiMessage = 'Log in to save AI settings.'; return; }
+		saveAIDraftingSettings($pubkey, aiSettings);
+		aiMessage = 'AI settings saved.';
+		setTimeout(() => (aiMessage = ''), 3000);
+	}
+
+	function changeProvider(provider: AIProvider) {
+		aiSettings = { ...aiSettings, provider, model: DEFAULT_MODELS[provider] };
+	}
 
 	async function connectNwc() {
 		try {
@@ -93,6 +109,20 @@
 				{$loadingRelays ? 'Fetching…' : 'Refresh from Nostr'}
 			</button>
 		</div>
+	</section>
+
+	<section>
+		<h2>AI writing assistant</h2>
+		<p class="desc">Configure the provider used by the AI assistant in the editor. Keys are stored only in this browser, per account, and are sent directly to the selected provider.</p>
+		<div class="ai-settings">
+			<select aria-label="AI provider" value={aiSettings.provider} onchange={(e) => changeProvider((e.currentTarget as HTMLSelectElement).value as AIProvider)}>
+				{#each Object.entries(PROVIDER_LABELS) as [value, label]}<option {value}>{label}</option>{/each}
+			</select>
+			<input type="text" placeholder="Model" bind:value={aiSettings.model} />
+			<input type="password" placeholder={`${PROVIDER_LABELS[aiSettings.provider]} API key`} bind:value={aiSettings.apiKey} autocomplete="off" />
+			<button onclick={saveAI} disabled={!$pubkey}>Save AI settings</button>
+		</div>
+		{#if aiMessage}<p class="message">{aiMessage}</p>{/if}
 	</section>
 
 	<section>
@@ -232,6 +262,7 @@
 	.add-relay input {
 		flex: 1;
 	}
+	.ai-settings { display: flex; flex-direction: column; gap: var(--space-sm); max-width: 32rem; }
 	.reset {
 		font-size: 0.8125rem;
 	}
