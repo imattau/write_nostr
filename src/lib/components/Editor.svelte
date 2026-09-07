@@ -282,9 +282,7 @@
 			></textarea>
 		{/if}
 	</div>
-	{#if showAI}
-		<AIDraftingPanel settings={aiSettings} {title} {content} {selectedText} onApply={applyAI} onClose={() => (showAI = false)} />
-	{/if}
+	<AIDraftingPanel open={showAI} settings={aiSettings} {title} {content} {selectedText} onApply={applyAI} onClose={() => (showAI = false)} />
 </div>
 
 <style>
