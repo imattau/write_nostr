@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, afterEach } from 'vitest';
-import { generateAIDraft } from './ai-drafting';
+import { generateAIDraft, listAvailableModels } from './ai-drafting';
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -19,5 +19,22 @@ describe('generateAIDraft', () => {
 		vi.restoreAllMocks();
 		vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ choices: [{ message: { content: '' } }] }), { status: 200 }));
 		await expect(generateAIDraft({ provider: 'groq', apiKey: 'key', model: 'model', action: 'draft', prompt: 'Write' })).rejects.toThrow('no draft content');
+	});
+});
+
+describe('listAvailableModels', () => {
+	it('lists active chat-capable models from the provider', async () => {
+		const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ data: [
+			{ id: 'gpt-4.1-mini' },
+			{ id: 'text-embedding-3-small' },
+			{ id: 'gpt-old', active: false }
+		] }), { status: 200 }));
+		expect(await listAvailableModels('openai', 'key')).toEqual([{ id: 'gpt-4.1-mini', name: 'gpt-4.1-mini' }]);
+		expect(fetchMock.mock.calls[0][0]).toBe('https://api.openai.com/v1/models');
+	});
+
+	it('surfaces model-list errors', async () => {
+		vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({ error: { message: 'Bad key' } }), { status: 401 }));
+		await expect(listAvailableModels('groq', 'key')).rejects.toThrow('Bad key');
 	});
 });

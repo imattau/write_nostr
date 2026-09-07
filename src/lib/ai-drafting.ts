@@ -17,6 +17,8 @@ export type GenerateDraftInput = AIDraftingSettings & {
 
 export type GenerateDraftResult = { markdown: string; provider: AIProvider; model: string };
 
+export type AvailableModel = { id: string; name: string };
+
 export const DEFAULT_MODELS: Record<AIProvider, string> = {
 	openai: 'gpt-4.1-mini',
 	groq: 'llama-3.3-70b-versatile'
@@ -28,6 +30,35 @@ const endpoints: Record<AIProvider, string> = {
 	openai: 'https://api.openai.com/v1/chat/completions',
 	groq: 'https://api.groq.com/openai/v1/chat/completions'
 };
+
+const modelEndpoints: Record<AIProvider, string> = {
+	openai: 'https://api.openai.com/v1/models',
+	groq: 'https://api.groq.com/openai/v1/models'
+};
+
+// The providers expose non-chat models from the same endpoint (embeddings,
+// speech, moderation, etc.). Keep the selector focused on likely chat models.
+function isChatModel(provider: AIProvider, id: string): boolean {
+	const normalized = id.toLowerCase();
+	if (provider === 'openai') {
+		return normalized.startsWith('gpt-') || normalized.startsWith('o1') || normalized.startsWith('o3') || normalized.startsWith('o4') || normalized.startsWith('chatgpt-') || normalized.startsWith('ft:gpt-');
+	}
+	return !['whisper', 'distil-whisper', 'guard', 'tts', 'orpheus'].some((part) => normalized.includes(part));
+}
+
+export async function listAvailableModels(provider: AIProvider, apiKey: string): Promise<AvailableModel[]> {
+	if (!apiKey.trim()) throw new Error(`Add an ${PROVIDER_LABELS[provider]} API key first.`);
+	const response = await fetch(modelEndpoints[provider], {
+		headers: { Authorization: `Bearer ${apiKey}` }
+	});
+	const payload = await response.json().catch(() => null) as any;
+	if (!response.ok) throw new Error(payload?.error?.message || `Could not fetch models (status ${response.status})`);
+	const models = Array.isArray(payload?.data) ? payload.data : [];
+	return models
+		.filter((model: any) => typeof model?.id === 'string' && model.id && model.active !== false && isChatModel(provider, model.id))
+		.map((model: any) => ({ id: model.id, name: model.id }))
+		.sort((a: AvailableModel, b: AvailableModel) => a.id.localeCompare(b.id));
+}
 
 function instruction(action: AIDraftAction): string {
 	return {

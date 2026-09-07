@@ -2,7 +2,7 @@
 	import { relays, loadingRelays } from '$lib/stores/relays';
 	import { auth, pubkey } from '$lib/stores/auth';
 	import { nwc } from '$lib/stores/nwc';
-	import { DEFAULT_MODELS, getDefaultAIDraftingSettings, loadAIDraftingSettings, PROVIDER_LABELS, saveAIDraftingSettings, type AIProvider, type AIDraftingSettings } from '$lib/ai-drafting';
+	import { DEFAULT_MODELS, getDefaultAIDraftingSettings, listAvailableModels, loadAIDraftingSettings, PROVIDER_LABELS, saveAIDraftingSettings, type AIProvider, type AIDraftingSettings, type AvailableModel } from '$lib/ai-drafting';
 
 	let newRelay = $state('');
 	let message = $state('');
@@ -10,6 +10,8 @@
 	let nwcMessage = $state('');
 	let aiSettings = $state<AIDraftingSettings>(getDefaultAIDraftingSettings());
 	let aiMessage = $state('');
+	let availableModels = $state<AvailableModel[]>([]);
+	let loadingModels = $state(false);
 
 	$effect(() => { aiSettings = loadAIDraftingSettings($pubkey); });
 
@@ -22,6 +24,24 @@
 
 	function changeProvider(provider: AIProvider) {
 		aiSettings = { ...aiSettings, provider, model: DEFAULT_MODELS[provider] };
+		availableModels = [];
+	}
+
+	async function refreshModels() {
+		if (!aiSettings.apiKey.trim()) { aiMessage = `Add a ${PROVIDER_LABELS[aiSettings.provider]} API key first.`; return; }
+		loadingModels = true;
+		try {
+			availableModels = await listAvailableModels(aiSettings.provider, aiSettings.apiKey);
+			if (availableModels.length > 0 && !availableModels.some((model) => model.id === aiSettings.model)) {
+				aiSettings = { ...aiSettings, model: availableModels[0].id };
+			}
+			aiMessage = availableModels.length ? `${availableModels.length} available models loaded.` : 'No chat models were returned by the provider.';
+		} catch (error: any) {
+			availableModels = [];
+			aiMessage = error?.message || 'Could not fetch available models.';
+		} finally {
+			loadingModels = false;
+		}
 	}
 
 	async function connectNwc() {
@@ -118,8 +138,15 @@
 			<select aria-label="AI provider" value={aiSettings.provider} onchange={(e) => changeProvider((e.currentTarget as HTMLSelectElement).value as AIProvider)}>
 				{#each Object.entries(PROVIDER_LABELS) as [value, label]}<option {value}>{label}</option>{/each}
 			</select>
-			<input type="text" placeholder="Model" bind:value={aiSettings.model} />
+			{#if availableModels.length}
+				<select aria-label="AI model" bind:value={aiSettings.model}>
+					{#each availableModels as model}<option value={model.id}>{model.name}</option>{/each}
+				</select>
+			{:else}
+				<input type="text" placeholder="Model (fetch available models)" bind:value={aiSettings.model} />
+			{/if}
 			<input type="password" placeholder={`${PROVIDER_LABELS[aiSettings.provider]} API key`} bind:value={aiSettings.apiKey} autocomplete="off" />
+			<button class="refresh" onclick={refreshModels} disabled={loadingModels || !aiSettings.apiKey.trim()}>{loadingModels ? 'Fetching…' : 'Fetch available models'}</button>
 			<button onclick={saveAI} disabled={!$pubkey}>Save AI settings</button>
 		</div>
 		{#if aiMessage}<p class="message">{aiMessage}</p>{/if}
