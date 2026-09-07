@@ -19,7 +19,9 @@ jobs:
           registry-url: 'https://registry.npmjs.org'
 
       - name: Install dependencies
-        run: npm ci
+        # npm ci rejects this lockfile when optional Tauri binaries for other
+        # platforms are absent. The release workflow uses npm install too.
+        run: npm install --ignore-scripts --no-audit --no-fund
 
       - name: Build
         run: npm run build
