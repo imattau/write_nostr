@@ -1,0 +1,12 @@
+repository: https://github.com/imattau/write_nostr
+name: Write Nostr
+summary: A long-form writing and publishing app for Nostr
+description: |
+  Write Nostr is a focused editor for creating, reading, and publishing NIP-23
+  long-form articles on the Nostr protocol. Draft and organize your writing,
+  browse articles, and publish directly to Nostr relays.
+license: MIT
+website: https://github.com/imattau/write_nostr
+icon: src-tauri/icons/icon.png
+release_source: https://github.com/imattau/write_nostr
+metadata_sources: []

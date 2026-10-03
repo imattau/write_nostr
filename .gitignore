@@ -33,3 +33,6 @@ build-aux/flatpak/build-dir/
 # Vite
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# Android signing key (private)
+/release.p12

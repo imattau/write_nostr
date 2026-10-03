@@ -66,6 +66,26 @@ npm run build      # Production build to ./build
 npm run preview    # Preview the production build locally
 ```
 
+## Android build
+
+Android APKs and app bundles are built by GitHub Actions when a `v*` release tag
+is pushed. The workflow installs the Android SDK and NDK on the GitHub-hosted
+runner, initializes Tauri's generated Android project there, signs the ARM64 APK
+and AAB with the Android release key, and uploads both to the workflow run and
+GitHub release. No Android development tools are needed on your local machine.
+
+Configure these repository secrets for Android release signing:
+
+- `ANDROID_KEYSTORE_BASE64` — base64-encoded PKCS#12 keystore
+- `ANDROID_KEYSTORE_PASSWORD`
+- `ANDROID_KEY_ALIAS`
+- `ANDROID_KEY_PASSWORD` — defaults to the keystore password if unset
+
+Tagged Android releases are also published to Zapstore using `zapstore.yaml`.
+Configure the repository secret `ZAPSTORE_NSEC` with the Zapstore publisher
+Nostr private key used by Scrollstr. The workflow validates the metadata, then
+publishes the signed APK after uploading it to the GitHub release.
+
 ## Deploy
 
 ```bash

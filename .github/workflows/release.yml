@@ -5,6 +5,163 @@ on:
       - 'v*'
 
 jobs:
+  build-android:
+    runs-on: ubuntu-24.04
+    needs: build-linux
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+
+      - name: Add Android Rust target
+        run: rustup target add aarch64-linux-android
+
+      - name: Install Android SDK components
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0" "ndk;27.2.12479018"
+
+      - name: Set Android NDK path
+        run: echo "NDK_HOME=$ANDROID_HOME/ndk/27.2.12479018" >> "$GITHUB_ENV"
+
+      - name: Install npm dependencies
+        run: npm install --ignore-scripts --no-audit --no-fund
+
+      - name: Set app version from tag
+        env:
+          VERSION: ${{ needs.build-linux.outputs.version }}
+        run: |
+          node -e '
+            const fs = require("fs");
+            const cfg = JSON.parse(fs.readFileSync("src-tauri/tauri.conf.json", "utf8"));
+            cfg.version = process.env.VERSION;
+            fs.writeFileSync("src-tauri/tauri.conf.json", JSON.stringify(cfg, null, 2) + "\n");
+          '
+          sed -i "s/^version = \".*\"/version = \"$VERSION\"/" src-tauri/Cargo.toml
+
+      - name: Initialize Android project
+        run: npm run tauri android init -- --ci
+
+      - name: Apply Android launcher icons
+        run: cp -r src-tauri/icons/android/. src-tauri/gen/android/app/src/main/res/
+
+      - name: Configure Android release signing
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          test -n "$ANDROID_KEYSTORE_BASE64"
+          test -n "$ANDROID_KEYSTORE_PASSWORD"
+          test -n "$ANDROID_KEY_ALIAS"
+          ANDROID_KEY_PASSWORD="${ANDROID_KEY_PASSWORD:-$ANDROID_KEYSTORE_PASSWORD}"
+          KEYSTORE_PATH="$RUNNER_TEMP/release.p12"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_PATH"
+
+          cat > src-tauri/gen/android/keystore.properties <<EOF
+          storeFile=$KEYSTORE_PATH
+          storePassword=$ANDROID_KEYSTORE_PASSWORD
+          keyAlias=$ANDROID_KEY_ALIAS
+          keyPassword=$ANDROID_KEY_PASSWORD
+          EOF
+
+          python3 - <<'PY'
+          import re
+
+          path = "src-tauri/gen/android/app/build.gradle.kts"
+          content = open(path).read()
+          if "import java.util.Properties" not in content:
+              content = "import java.util.Properties\n" + content
+
+          signing_block = '''
+              signingConfigs {
+                  create("release") {
+                      val propertiesFile = rootProject.file("keystore.properties")
+                      val properties = Properties()
+                      properties.load(propertiesFile.inputStream())
+                      storeFile = file(properties["storeFile"] as String)
+                      storePassword = properties["storePassword"] as String
+                      keyAlias = properties["keyAlias"] as String
+                      keyPassword = properties["keyPassword"] as String
+                      storeType = "PKCS12"
+                  }
+              }
+          '''
+
+          if "signingConfigs {" not in content:
+              assert "    buildTypes {" in content, "buildTypes block not found in generated Gradle file"
+              content = content.replace("    buildTypes {", signing_block + "    buildTypes {", 1)
+
+          release_pattern = r'(getByName\("release"\)\s*\{\s*)'
+          content, count = re.subn(
+              release_pattern,
+              lambda match: match.group(1) + '            signingConfig = signingConfigs.getByName("release")\n',
+              content,
+              count=1,
+          )
+          assert count == 1, "release buildType not found in generated Gradle file"
+          open(path, "w").write(content)
+          PY
+
+      - name: Build signed Android APK and AAB
+        run: npm run tauri android build -- --target aarch64 --apk --aab
+
+      - name: Upload Android packages to workflow run
+        uses: actions/upload-artifact@v4
+        with:
+          name: write-nostr-android
+          path: |
+            src-tauri/gen/android/app/build/outputs/apk/**/*.apk
+            src-tauri/gen/android/app/build/outputs/bundle/**/*.aab
+          if-no-files-found: error
+
+      - name: Attach APK to GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          APK=$(find src-tauri/gen/android/app/build/outputs/apk -type f -name '*.apk' -print -quit)
+          AAB=$(find src-tauri/gen/android/app/build/outputs/bundle -type f -name '*.aab' -print -quit)
+          test -n "$APK"
+          test -n "$AAB"
+          gh release upload "$GITHUB_REF_NAME" \
+            "$APK#write-nostr-android-arm64.apk" \
+            "$AAB#write-nostr-android.aab" \
+            --clobber
+
+      - name: Set up Go for Zapstore CLI
+        uses: actions/setup-go@v5
+        with:
+          go-version: stable
+
+      - name: Install Zapstore CLI
+        run: go install github.com/zapstore/zsp/cmd/zsp@latest
+
+      - name: Validate Zapstore metadata
+        run: |
+          export PATH="$(go env GOPATH)/bin:$PATH"
+          zsp publish --check zapstore.yaml
+
+      - name: Publish Android release to Zapstore
+        env:
+          SIGN_WITH: ${{ secrets.ZAPSTORE_NSEC }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          test -n "$SIGN_WITH"
+          export PATH="$(go env GOPATH)/bin:$PATH"
+          zsp publish --quiet --skip-preview zapstore.yaml
+
   build-linux:
     runs-on: ubuntu-24.04
     permissions:
