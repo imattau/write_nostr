@@ -3,7 +3,7 @@ import { SimplePool } from 'nostr-tools';
 import type { NostrEvent } from 'nostr-tools';
 import { auth } from '$lib/stores/auth';
 import { relays } from '$lib/stores/relays';
-import { saveList, tagsToEntries, type ListEntry } from '$lib/nostr/lists';
+import { readCachedListEvents, removeCachedListEvent, saveList, tagsToEntries, type ListEntry } from '$lib/nostr/lists';
 import { decryptPrivateTags } from '$lib/nostr/listCrypto';
 
 const CATEGORIZED_KIND = 30000;
@@ -11,12 +11,14 @@ const CATEGORIZED_KIND = 30000;
 export type CategorizedList = { name: string; entries: ListEntry[] };
 
 const listsStore = writable<CategorizedList[]>([]);
+let listsRevision = 0;
 
 export const categorizedLists = derived(listsStore, ($l) => $l);
 
 export async function loadCategorizedLists(): Promise<void> {
 	const signer = get(auth);
 	if (!signer) return;
+	const revision = listsRevision;
 
 	const pool = new SimplePool();
 	let events: NostrEvent[];
@@ -29,8 +31,9 @@ export async function loadCategorizedLists(): Promise<void> {
 		pool.destroy();
 	}
 
+	if (get(auth)?.pubkey !== signer.pubkey || revision !== listsRevision) return;
 	const latestByName = new Map<string, NostrEvent>();
-	for (const event of events) {
+	for (const event of [...readCachedListEvents(signer, CATEGORIZED_KIND), ...events]) {
 		const name = event.tags.find(([k]) => k === 'd')?.[1];
 		if (!name) continue;
 		const existing = latestByName.get(name);
@@ -43,12 +46,13 @@ export async function loadCategorizedLists(): Promise<void> {
 		const privateTags = await decryptPrivateTags(signer, event.content);
 		result.push({ name, entries: tagsToEntries(publicTags, privateTags) });
 	}
-	listsStore.set(result);
+	if (get(auth)?.pubkey === signer.pubkey && revision === listsRevision) listsStore.set(result);
 }
 
 export async function createCategorizedList(name: string): Promise<void> {
 	const signer = get(auth);
 	if (!signer) throw new Error('Not authenticated');
+	listsRevision++;
 	if (get(listsStore).some((l) => l.name === name)) throw new Error('A list with that name already exists');
 
 	listsStore.update((lists) => [...lists, { name, entries: [] }]);
@@ -58,6 +62,7 @@ export async function createCategorizedList(name: string): Promise<void> {
 export async function renameCategorizedList(oldName: string, newName: string): Promise<void> {
 	const signer = get(auth);
 	if (!signer) throw new Error('Not authenticated');
+	listsRevision++;
 
 	const list = get(listsStore).find((l) => l.name === oldName);
 	if (!list) throw new Error(`List "${oldName}" not found`);
@@ -71,6 +76,7 @@ export async function renameCategorizedList(oldName: string, newName: string): P
 export async function deleteCategorizedList(name: string): Promise<void> {
 	const signer = get(auth);
 	if (!signer) throw new Error('Not authenticated');
+	listsRevision++;
 
 	await saveList(signer, get(relays), { kind: CATEGORIZED_KIND, dTag: name }, []);
 
@@ -89,6 +95,7 @@ export async function deleteCategorizedList(name: string): Promise<void> {
 	} finally {
 		pool.destroy();
 	}
+	removeCachedListEvent(signer.pubkey, { kind: CATEGORIZED_KIND, dTag: name });
 
 	listsStore.update((lists) => lists.filter((l) => l.name !== name));
 }
@@ -100,6 +107,7 @@ export async function addPersonToList(
 ): Promise<void> {
 	const signer = get(auth);
 	if (!signer) throw new Error('Not authenticated');
+	listsRevision++;
 
 	const isPrivate = opts.private ?? false;
 	listsStore.update((lists) =>
@@ -118,6 +126,7 @@ export async function addPersonToList(
 export async function removePersonFromList(name: string, pubkey: string): Promise<void> {
 	const signer = get(auth);
 	if (!signer) throw new Error('Not authenticated');
+	listsRevision++;
 
 	listsStore.update((lists) =>
 		lists.map((l) => (l.name === name ? { ...l, entries: l.entries.filter((e) => e.tag[1] !== pubkey) } : l))
@@ -131,6 +140,7 @@ export async function removePersonFromList(name: string, pubkey: string): Promis
 export async function setListEntryPrivacy(name: string, pubkey: string, isPrivate: boolean): Promise<void> {
 	const signer = get(auth);
 	if (!signer) throw new Error('Not authenticated');
+	listsRevision++;
 
 	listsStore.update((lists) =>
 		lists.map((l) =>

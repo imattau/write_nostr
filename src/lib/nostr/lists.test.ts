@@ -1,5 +1,36 @@
-import { describe, it, expect } from 'vitest';
-import { tagsToEntries, entriesToTags } from './lists';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { finalizeEvent, generateSecretKey, getPublicKey, SimplePool } from 'nostr-tools';
+import { loadList, tagsToEntries, entriesToTags } from './lists';
+
+const localValues = new Map<string, string>();
+
+afterEach(() => {
+	localValues.clear();
+	vi.unstubAllGlobals();
+});
+
+describe('loadList cache', () => {
+	it('uses a verified local list when relay data is unavailable', async () => {
+		vi.spyOn(SimplePool.prototype, 'querySync').mockResolvedValue([]);
+		vi.stubGlobal('localStorage', {
+			getItem: (key: string) => localValues.get(key) ?? null,
+			setItem: (key: string, value: string) => localValues.set(key, value)
+		});
+		const secretKey = generateSecretKey();
+		const pubkey = getPublicKey(secretKey);
+		const event = finalizeEvent({
+			kind: 10000,
+			created_at: Math.floor(Date.now() / 1000),
+			tags: [['p', 'a'.repeat(64)]],
+			content: ''
+		}, secretKey);
+		localValues.set(`write_nip51_${pubkey}_10000_`, JSON.stringify(event));
+		const signer = { type: 'nsec' as const, pubkey, sign: async () => event };
+		await expect(loadList(signer, [], { kind: 10000 })).resolves.toEqual([
+			{ tag: ['p', 'a'.repeat(64)], private: false }
+		]);
+	});
+});
 
 describe('tagsToEntries', () => {
 	it('marks public tags as not private and private tags as private, public first', () => {

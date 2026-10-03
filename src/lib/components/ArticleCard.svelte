@@ -9,8 +9,7 @@
 		followUser,
 		unfollowUser,
 		blockUser,
-		unblockUser,
-		loadSocialLists
+		unblockUser
 	} from '$lib/stores/social';
 
 	import { relays } from '$lib/stores/relays';
@@ -45,7 +44,6 @@
 	// Load social lists once when we have a logged-in user
 	$effect(() => {
 		if ($myPubkey) {
-			loadSocialLists();
 			loadBookmarks();
 			loadPins();
 		}
@@ -102,6 +100,7 @@
 
 	let followBusy = $state(false);
 	let blockBusy = $state(false);
+	let blockError = $state('');
 	let bookmarkBusy = $state(false);
 	let pinBusy = $state(false);
 
@@ -123,9 +122,12 @@
 		e.stopPropagation();
 		if (blockBusy) return;
 		blockBusy = true;
+		blockError = '';
 		try {
 			if (isBlocked) await unblockUser(event.pubkey);
 			else await blockUser(event.pubkey);
+		} catch (error) {
+			blockError = error instanceof Error ? error.message : 'Could not update mute list.';
 		} finally {
 			blockBusy = false;
 		}
@@ -259,8 +261,14 @@
 		{/if}
 	</div>
 </a>
+{#if blockError}<p class="block-error" role="status">{blockError}</p>{/if}
 
 <style>
+	.block-error {
+		margin: var(--space-xs) 0 0;
+		color: var(--c-danger);
+		font-size: 0.75rem;
+	}
 	.card {
 		display: block;
 		padding: var(--space-md) var(--space-lg);

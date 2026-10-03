@@ -4,7 +4,7 @@
 	import type { NostrEvent } from 'nostr-tools';
 	import { relays } from '$lib/stores/relays';
 	import { pubkey } from '$lib/stores/auth';
-	import { blocks } from '$lib/stores/social';
+	import { blocks, loadSocialLists } from '$lib/stores/social';
 	import {
 		fetchArticles,
 		fetchFollowList,
@@ -85,6 +85,11 @@
 	});
 
 	onMount(async () => {
+		const currentPubkey = get(pubkey);
+		if (currentPubkey) {
+			await relays.loadFromNostr(currentPubkey);
+			await loadSocialLists().catch(() => {});
+		}
 		await load('all');
 	});
 

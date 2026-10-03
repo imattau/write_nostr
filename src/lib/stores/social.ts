@@ -15,6 +15,10 @@ const followedPubkeys = writable<Set<string>>(new Set());
 const blockedListEntries = writable<ListEntry[]>([]);
 
 let followEventTags: string[][] = []; // full tag list from last kind:3 event
+let socialListsLoadedFor: string | null = null;
+let socialListsLoadingFor: string | null = null;
+let socialListsLoad: Promise<void> | null = null;
+let blockedListRevision = 0;
 
 // ── Public derived stores ──────────────────────────────────────────────────
 
@@ -34,35 +38,47 @@ export const blockedEntries = derived(blockedListEntries, ($e) => $e);
 export async function loadSocialLists(): Promise<void> {
 	const signer = get(auth);
 	if (!signer) return;
+	if (socialListsLoadedFor === signer.pubkey) return;
+	if (socialListsLoad && socialListsLoadingFor === signer.pubkey) return socialListsLoad;
 
 	const relayList = get(relays);
-	const pool = new SimplePool();
-
-	try {
-		const events = await pool.querySync(relayList, {
-			kinds: [3],
-			authors: [signer.pubkey],
-			limit: 1
-		});
-
-		// kind:3 – contact list (follows)
-		const followEvent = events.sort((a, b) => b.created_at - a.created_at)[0];
-
-		if (followEvent) {
-			followEventTags = followEvent.tags;
-			followedPubkeys.set(
-				new Set(
-					followEvent.tags.filter(([k]) => k === 'p').map(([, pk]) => pk)
-				)
-			);
+	const revisionAtStart = blockedListRevision;
+	const promise = (async () => {
+		const pool = new SimplePool();
+		try {
+			const events = await pool.querySync(relayList, {
+				kinds: [3],
+				authors: [signer.pubkey],
+				limit: 1
+			});
+			const followEvent = events.sort((a, b) => b.created_at - a.created_at)[0];
+			if (followEvent && get(auth)?.pubkey === signer.pubkey) {
+				followEventTags = followEvent.tags;
+				followedPubkeys.set(new Set(followEvent.tags.filter(([k]) => k === 'p').map(([, pk]) => pk)));
+			}
+		} catch (err) {
+			console.warn('[social] Could not load follow list:', err);
+		} finally {
+			pool.destroy();
 		}
-	} finally {
-		pool.destroy();
-	}
 
-	// kind:10000 – mute/block list (public + private)
-	const entries = await loadList(signer, relayList, { kind: 10000 });
-	blockedListEntries.set(entries);
+		// kind:10000 – mute/block list (public + private)
+		const entries = await loadList(signer, relayList, { kind: 10000 });
+		if (get(auth)?.pubkey === signer.pubkey && revisionAtStart === blockedListRevision) {
+			blockedListEntries.set(entries);
+			socialListsLoadedFor = signer.pubkey;
+		}
+	})();
+	socialListsLoadingFor = signer.pubkey;
+	socialListsLoad = promise;
+	try {
+		await promise;
+	} finally {
+		if (socialListsLoad === promise) {
+			socialListsLoad = null;
+			socialListsLoadingFor = null;
+		}
+	}
 }
 
 // ── Follow ─────────────────────────────────────────────────────────────────
@@ -109,39 +125,56 @@ export async function unfollowUser(pubkey: string): Promise<void> {
 // ── Block ──────────────────────────────────────────────────────────────────
 
 export async function blockUser(pubkey: string, opts: { private?: boolean } = {}): Promise<void> {
+	await loadSocialLists();
 	const signer = get(auth);
 	if (!signer) throw new Error('Not authenticated');
+	if (socialListsLoadedFor !== signer.pubkey) throw new Error('Could not load your mute list. Check your relay connection and try again.');
+	blockedListRevision++;
+	const mutationRevision = blockedListRevision;
+	const previous = get(blockedListEntries);
+	if (previous.some((entry) => entry.tag[1] === pubkey)) return;
 
 	const isPrivate = opts.private ?? false;
 
 	// Optimistic update
-	blockedListEntries.update((entries) => {
-		if (entries.some((e) => e.tag[1] === pubkey)) return entries;
-		return [...entries, { tag: ['p', pubkey], private: isPrivate }];
-	});
+	blockedListEntries.set([...previous, { tag: ['p', pubkey], private: isPrivate }]);
 
 	// Purge cached events and profile for the blocked user
 	removeNodesByPubkey(pubkey).catch(() => {});
 
-	const newEntries = get(blockedListEntries);
-	await saveList(signer, get(relays), { kind: 10000 }, newEntries);
+	try {
+		await saveList(signer, get(relays), { kind: 10000 }, get(blockedListEntries));
+	} catch (error) {
+		if (blockedListRevision === mutationRevision) blockedListEntries.set(previous);
+		throw error;
+	}
 }
 
 export async function unblockUser(pubkey: string): Promise<void> {
+	await loadSocialLists();
 	const signer = get(auth);
 	if (!signer) throw new Error('Not authenticated');
+	if (socialListsLoadedFor !== signer.pubkey) throw new Error('Could not load your mute list. Check your relay connection and try again.');
+	blockedListRevision++;
+	const mutationRevision = blockedListRevision;
+	const previous = get(blockedListEntries);
 
 	// Optimistic update
 	blockedListEntries.update((entries) => entries.filter((e) => e.tag[1] !== pubkey));
 
-	const newEntries = get(blockedListEntries);
-	await saveList(signer, get(relays), { kind: 10000 }, newEntries);
+	try {
+		await saveList(signer, get(relays), { kind: 10000 }, get(blockedListEntries));
+	} catch (error) {
+		if (blockedListRevision === mutationRevision) blockedListEntries.set(previous);
+		throw error;
+	}
 }
 
 /** Sets an existing mute-list entry's privacy flag and republishes the list. Used by the Lists page. */
 export async function setBlockedEntryPrivacy(pubkey: string, isPrivate: boolean): Promise<void> {
 	const signer = get(auth);
 	if (!signer) throw new Error('Not authenticated');
+	blockedListRevision++;
 
 	blockedListEntries.update((entries) =>
 		entries.map((e) => (e.tag[1] === pubkey ? { ...e, private: isPrivate } : e))

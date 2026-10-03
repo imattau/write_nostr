@@ -1,8 +1,8 @@
 {
 	"name": "write-nostr",
-	"version": "0.4.7",
+	"version": "0.4.8",
 	"private": false,
-	"description": "Browser-based long-form writing app for the Nostr protocol \u2014 NIP-23 editor, feed reader, and publishing tool",
+	"description": "Browser-based long-form writing app for the Nostr protocol — NIP-23 editor, feed reader, and publishing tool",
 	"license": "MIT",
 	"author": "lostcause <lostcause@3nostr.com>",
 	"repository": {

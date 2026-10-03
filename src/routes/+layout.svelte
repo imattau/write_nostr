@@ -5,6 +5,9 @@
 	import Nav from '$lib/components/Nav.svelte';
 	import { auth, isAuthenticated, pubkey } from '$lib/stores/auth';
 	import { relays } from '$lib/stores/relays';
+	import { loadSocialLists } from '$lib/stores/social';
+	import { initializeEncryptedSettingsSync } from '$lib/nostr/settingsSync';
+	import { nwc } from '$lib/stores/nwc';
 	import { onMount } from 'svelte';
 	import { pruneStaleCache } from '$lib/graph';
 
@@ -24,7 +27,14 @@
 	// When a pubkey becomes available after login, load the user's relay list.
 	$effect(() => {
 		if ($pubkey) {
-			relays.loadFromNostr($pubkey);
+			const key = $pubkey;
+			relays.loadFromNostr(key).then(async () => {
+				await initializeEncryptedSettingsSync(key);
+				nwc.reloadForAccount(key);
+				await loadSocialLists();
+			}).catch((error) => {
+				console.warn('[social] Could not initialize mute list:', error);
+			});
 		}
 	});
 </script>

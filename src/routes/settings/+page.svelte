@@ -2,6 +2,8 @@
 	import { relays, loadingRelays } from '$lib/stores/relays';
 	import { auth, pubkey } from '$lib/stores/auth';
 	import { nwc } from '$lib/stores/nwc';
+	import { settingsSyncRevision, settingsSyncStatus, scheduleEncryptedSettingsSync } from '$lib/nostr/settingsSync';
+	import { DEFAULT_BLOSSOM_SERVERS, fetchBlossomServerList, loadBlossomSettings, saveBlossomSettings, type BlossomSettings } from '$lib/nostr/blossom';
 	import { DEFAULT_MODELS, getDefaultAIDraftingSettings, listAvailableModels, loadAIDraftingSettings, PROVIDER_LABELS, saveAIDraftingSettings, type AIProvider, type AIDraftingSettings, type AvailableModel } from '$lib/ai-drafting';
 
 	let newRelay = $state('');
@@ -12,8 +14,49 @@
 	let aiMessage = $state('');
 	let availableModels = $state<AvailableModel[]>([]);
 	let loadingModels = $state(false);
+	let blossomSettings = $state<BlossomSettings>({ servers: [...DEFAULT_BLOSSOM_SERVERS] });
+	let discoveredBlossomServers = $state<string[]>([]);
+	let loadingBlossomServers = $state(false);
+	let newBlossomServer = $state('');
+	let blossomMessage = $state('');
 
-	$effect(() => { aiSettings = loadAIDraftingSettings($pubkey); });
+	$effect(() => { $settingsSyncRevision; aiSettings = loadAIDraftingSettings($pubkey); });
+	$effect(() => { $settingsSyncRevision; blossomSettings = loadBlossomSettings($pubkey); });
+	$effect(() => {
+		const key = $pubkey;
+		const relayList = $relays;
+		if (key) void refreshBlossomServers(key, relayList);
+	});
+
+	async function refreshBlossomServers(key = $pubkey, relayList = $relays) {
+		if (!key) { discoveredBlossomServers = []; return; }
+		loadingBlossomServers = true;
+		try {
+			discoveredBlossomServers = await fetchBlossomServerList(key, relayList);
+			blossomMessage = discoveredBlossomServers.length ? 'Your Blossom server list was found.' : 'No kind 10063 server list was found; app defaults will be used.';
+		} catch {
+			discoveredBlossomServers = [];
+			blossomMessage = 'Could not fetch your Blossom server list; app defaults will be used.';
+		} finally {
+			loadingBlossomServers = false;
+		}
+	}
+
+	function saveBlossom() {
+		if (!$pubkey) { blossomMessage = 'Log in to save Blossom settings.'; return; }
+		saveBlossomSettings($pubkey, blossomSettings);
+		scheduleEncryptedSettingsSync($pubkey);
+		blossomSettings = loadBlossomSettings($pubkey);
+		blossomMessage = 'Blossom defaults saved.';
+	}
+
+	function addBlossomServer() {
+		const value = newBlossomServer.trim().replace(/\/$/, '');
+		if (!/^https?:\/\//i.test(value)) { blossomMessage = 'Blossom server URL must start with https:// or http://'; return; }
+		if (!blossomSettings.servers.includes(value)) blossomSettings = { servers: [...blossomSettings.servers, value] };
+		newBlossomServer = '';
+		blossomMessage = '';
+	}
 
 	function saveAI() {
 		if (!$pubkey) { aiMessage = 'Log in to save AI settings.'; return; }
@@ -132,8 +175,51 @@
 	</section>
 
 	<section>
+		<h2>Blossom image uploads</h2>
+		<p class="desc">Uploads use your kind 10063 Blossom server list when available, in its listed order, then try these saved defaults as fallbacks.</p>
+		{#if $pubkey && loadingBlossomServers}
+			<p class="loading-relays">⟳ Checking your Blossom server list…</p>
+		{:else if discoveredBlossomServers.length}
+			<div class="relay-list">
+				{#each discoveredBlossomServers as server (server)}
+					<div class="relay-item"><span class="relay-url">{server}</span><span class="label">From your Nostr list</span></div>
+				{/each}
+			</div>
+		{/if}
+		<div class="relay-list">
+			{#each blossomSettings.servers as server (server)}
+				<div class="relay-item">
+					<span class="relay-url">{server}</span>
+					<button class="remove" onclick={() => blossomSettings = { servers: blossomSettings.servers.filter((item) => item !== server) }}>Remove</button>
+				</div>
+			{/each}
+		</div>
+		<form class="add-relay" onsubmit={(e) => { e.preventDefault(); addBlossomServer(); }}>
+			<input type="url" placeholder="https://blossom.example.com" bind:value={newBlossomServer} />
+			<button type="submit" disabled={!newBlossomServer.trim()}>Add</button>
+		</form>
+		<div class="relay-actions">
+			<button onclick={saveBlossom} disabled={!$pubkey}>Save Blossom defaults</button>
+			<button class="refresh" onclick={() => refreshBlossomServers()} disabled={loadingBlossomServers || !$pubkey}>{loadingBlossomServers ? 'Checking…' : 'Refresh from Nostr'}</button>
+		</div>
+		{#if blossomMessage}<p class="message">{blossomMessage}</p>{/if}
+	</section>
+
+	<section>
+		<h2>Encrypted settings sync</h2>
+		<p class="desc">AI provider keys, wallet connection strings, and Blossom defaults sync automatically in a NIP-44 encrypted Nostr event. Relays can see the event and its timing, but only your Nostr account key can decrypt its contents.</p>
+		{#if !$pubkey}
+			<p class="message">Log in with a NIP-44 capable signer to sync settings.</p>
+		{:else if $settingsSyncStatus.pubkey === $pubkey}
+			<p class="message">{$settingsSyncStatus.message}</p>
+		{:else}
+			<p class="message">Preparing encrypted settings sync…</p>
+		{/if}
+	</section>
+
+	<section>
 		<h2>AI writing assistant</h2>
-		<p class="desc">Configure the provider used by the AI assistant in the editor. Keys are stored only in this browser, per account, and are sent directly to the selected provider.</p>
+		<p class="desc">Configure the provider used by the AI assistant in the editor. Keys are stored per account on this device and included in encrypted Nostr settings sync when your signer supports NIP-44. They are sent directly to the selected provider when used.</p>
 		<div class="ai-settings">
 			<select aria-label="AI provider" value={aiSettings.provider} onchange={(e) => changeProvider((e.currentTarget as HTMLSelectElement).value as AIProvider)}>
 				{#each Object.entries(PROVIDER_LABELS) as [value, label]}<option {value}>{label}</option>{/each}

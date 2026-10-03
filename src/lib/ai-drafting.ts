@@ -1,3 +1,5 @@
+import { scheduleEncryptedSettingsSync } from '$lib/nostr/settingsSync';
+
 export type AIProvider = 'openai' | 'groq';
 export type AIDraftAction = 'draft' | 'rewrite' | 'concise' | 'expand' | 'summary';
 
@@ -105,6 +107,7 @@ export function loadAIDraftingSettings(pubkey: string | null): AIDraftingSetting
 export function saveAIDraftingSettings(pubkey: string | null, settings: AIDraftingSettings): void {
 	if (typeof localStorage === 'undefined' || !pubkey) return;
 	localStorage.setItem(`write_ai_drafting_${pubkey}`, JSON.stringify(settings));
+	scheduleEncryptedSettingsSync(pubkey);
 }
 
 export async function generateAIDraft(input: GenerateDraftInput): Promise<GenerateDraftResult> {

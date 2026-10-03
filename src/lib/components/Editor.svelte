@@ -3,6 +3,7 @@
 	import { renderMarkdown } from '$lib/utils/markdown';
 	import { generateId, drafts, type Draft } from '$lib/stores/drafts';
 	import { pubkey } from '$lib/stores/auth';
+	import { uploadImage } from '$lib/nostr/blossom';
 	import { getDefaultAIDraftingSettings, loadAIDraftingSettings, type AIDraftAction, type AIDraftingSettings } from '$lib/ai-drafting';
 	import AIDraftingPanel from '$lib/components/AIDraftingPanel.svelte';
 
@@ -38,6 +39,11 @@
 	let aiSettings = $state<AIDraftingSettings>(getDefaultAIDraftingSettings());
 	let selectedText = $state('');
 	let aiSelection = $state({ start: 0, end: 0 });
+	let featuredFileInput = $state<HTMLInputElement | null>(null);
+	let inlineFileInput = $state<HTMLInputElement | null>(null);
+	let imageUploadBusy = $state(false);
+	let imageUploadMessage = $state('');
+	let imageInsertPosition = $state(0);
 
 	$effect(() => { aiSettings = loadAIDraftingSettings($pubkey); });
 
@@ -108,6 +114,41 @@
 
 	function removeTag(t: string) {
 		tags = tags.filter((x) => x !== t);
+	}
+
+	function chooseInlineImage() {
+		imageInsertPosition = contentTextarea?.selectionStart ?? content.length;
+		inlineFileInput?.click();
+	}
+
+	async function handleImageFile(event: Event, target: 'featured' | 'inline') {
+		const input = event.currentTarget as HTMLInputElement;
+		const file = input.files?.[0];
+		input.value = '';
+		if (!file) return;
+		imageUploadBusy = true;
+		imageUploadMessage = `Uploading ${file.name}…`;
+		try {
+			const url = await uploadImage(file);
+			if (target === 'featured') {
+				image = url;
+				showMeta = true;
+			} else {
+				const alt = file.name.replace(/\\/g, '\\\\').replace(/\]/g, '\\]').replace(/[\r\n]/g, ' ').replace(/\)/g, '\\)');
+				const insertion = `![${alt}](${url})`;
+				const start = Math.min(imageInsertPosition, content.length);
+				content = `${content.slice(0, start)}${insertion}${content.slice(start)}`;
+				await tick();
+				contentTextarea?.focus();
+				contentTextarea?.setSelectionRange(start + insertion.length, start + insertion.length);
+			}
+			imageUploadMessage = 'Image uploaded.';
+			autoSave();
+		} catch (error) {
+			imageUploadMessage = error instanceof Error ? error.message : String(error);
+		} finally {
+			imageUploadBusy = false;
+		}
 	}
 
 	async function applyInlineMarkdown(before: string, after = before, placeholder = 'text') {
@@ -228,6 +269,10 @@
 					bind:value={image}
 					oninput={autoSave}
 				/>
+				<div class="featured-image-upload">
+					<button type="button" onclick={() => featuredFileInput?.click()} disabled={imageUploadBusy}>Choose featured image</button>
+					<input bind:this={featuredFileInput} class="file-input" type="file" accept="image/*" aria-label="Choose featured image" onchange={(event) => handleImageFile(event, 'featured')} />
+				</div>
 				<div class="tags">
 					{#each tags as tag}
 						<span class="tag">
@@ -252,6 +297,10 @@
 
 		{#if !showPreview}
 			<div class="markdown-toolbar" aria-label="Markdown formatting tools">
+				<button type="button" class="markdown-button" onclick={chooseInlineImage} disabled={imageUploadBusy} aria-label="Insert image" title="Insert image">
+					<span class="markdown-icon" aria-hidden="true">▧</span>
+					<span class="markdown-label">Image</span>
+				</button>
 				{#each markdownActions as action}
 					<button
 						type="button"
@@ -281,11 +330,16 @@
 				oninput={autoSave}
 			></textarea>
 		{/if}
+		<input bind:this={inlineFileInput} class="file-input" type="file" accept="image/*" aria-label="Choose image to insert" onchange={(event) => handleImageFile(event, 'inline')} />
+		{#if imageUploadMessage}<p class="image-upload-message" role="status">{imageUploadMessage}</p>{/if}
 	</div>
 	<AIDraftingPanel open={showAI} settings={aiSettings} {title} {content} {selectedText} onApply={applyAI} onClose={() => (showAI = false)} />
 </div>
 
 <style>
+	.file-input { display: none; }
+	.image-upload-message { margin: 0; color: var(--c-text-secondary); font-size: 0.875rem; overflow-wrap: anywhere; }
+	.featured-image-upload { display: flex; }
 	.editor {
 		display: flex;
 		flex-direction: column;

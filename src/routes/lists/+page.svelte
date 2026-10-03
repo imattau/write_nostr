@@ -4,9 +4,11 @@
 	import { profileCache, requestProfiles, displayName } from '$lib/stores/profiles';
 	import { encodeNaddr } from '$lib/utils/nip19';
 	import { fetchArticleByIdentifier } from '$lib/nostr/fetch';
+	import { parsePubkeyInput } from '$lib/utils/pubkey';
 
 	import {
 		blockedEntries,
+		blockUser,
 		unblockUser,
 		setBlockedEntryPrivacy,
 		loadSocialLists
@@ -129,6 +131,8 @@
 	let addMemberInputs = $state<Record<string, string>>({});
 	let addMemberPrivate = $state<Record<string, boolean>>({});
 	let message = $state('');
+	let newBlockedUser = $state('');
+	let newBlockedPrivate = $state(false);
 
 	function showMessage(msg: string) {
 		message = msg;
@@ -181,17 +185,32 @@
 		const input = (addMemberInputs[listName] || '').trim();
 		if (!input) return;
 		try {
-			const { nip19 } = await import('nostr-tools');
-			let pk = input;
-			if (input.startsWith('npub1')) {
-				const decoded = nip19.decode(input);
-				if (decoded.type !== 'npub') throw new Error('Invalid npub');
-				pk = decoded.data as string;
-			}
+			const pk = parsePubkeyInput(input);
 			await addPersonToList(listName, pk, { private: !!addMemberPrivate[listName] });
 			addMemberInputs[listName] = '';
 		} catch (e: any) {
 			showMessage(e?.message || 'Failed to add member');
+		}
+	}
+
+	async function handleBlockNpub() {
+		try {
+			const pubkey = parsePubkeyInput(newBlockedUser);
+			await blockUser(pubkey, { private: newBlockedPrivate && hasCrypto });
+			newBlockedUser = '';
+			newBlockedPrivate = false;
+			showMessage('User blocked.');
+		} catch (e: any) {
+			showMessage(e?.message || 'Failed to block user');
+		}
+	}
+
+	async function handleUnblock(pubkey: string) {
+		try {
+			await unblockUser(pubkey);
+			showMessage('User unblocked.');
+		} catch (e: any) {
+			showMessage(e?.message || 'Failed to unblock user');
 		}
 	}
 </script>
@@ -227,11 +246,19 @@
 							/>
 							Private
 						</label>
-						<button class="remove" onclick={() => unblockUser(entry.tag[1])}>Remove</button>
+						<button class="remove" onclick={() => handleUnblock(entry.tag[1])}>Remove</button>
 					</div>
 				{/each}
 			</div>
 		{/if}
+		<form class="add-member" onsubmit={(e) => { e.preventDefault(); handleBlockNpub(); }}>
+			<input type="text" placeholder="npub or 64-character hex public key" bind:value={newBlockedUser} />
+			<label class="private-toggle" title={hasCrypto ? 'Add as a private mute entry' : 'Encryption not supported by signer'}>
+				<input type="checkbox" bind:checked={newBlockedPrivate} disabled={!hasCrypto} />
+				Private
+			</label>
+			<button type="submit" disabled={!newBlockedUser.trim()}>Block user</button>
+		</form>
 	</section>
 
 	<!-- Bookmarks -->

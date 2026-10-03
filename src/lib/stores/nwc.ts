@@ -1,6 +1,8 @@
 import { writable, get } from 'svelte/store';
 import { nip47, nip04, SimplePool, finalizeEvent, getPublicKey } from 'nostr-tools';
 import { hexToBytes } from '@noble/hashes/utils.js';
+import { auth, type Signer } from '$lib/stores/auth';
+import { scheduleEncryptedSettingsSync } from '$lib/nostr/settingsSync';
 
 export type NwcState = {
 	connected: boolean;
@@ -18,27 +20,34 @@ const empty: NwcState = {
 	balance: null
 };
 
-function restoreState(): NwcState {
+function accountConnectionKey(pubkey: string): string {
+	return `write_nwc_connection_${pubkey}`;
+}
+
+function restoreState(connectionString: string | null): NwcState {
 	try {
-		const stored = localStorage.getItem('write_nwc_connection');
-		if (!stored) return empty;
-		const parsed = nip47.parseConnectionString(stored);
+		if (!connectionString) return empty;
+		const parsed = nip47.parseConnectionString(connectionString);
 		return {
 			connected: true,
-			connectionString: stored,
+			connectionString,
 			walletPubkey: parsed.pubkey,
 			relay: parsed.relays[0],
 			balance: null
 		};
 	} catch {
-		localStorage.removeItem('write_nwc_connection');
 		return empty;
 	}
 }
 
+function storedConnection(): string | null {
+	const signer = get(auth);
+	return signer ? localStorage.getItem(accountConnectionKey(signer.pubkey)) : localStorage.getItem('write_nwc_connection');
+}
+
 function makeNwcRequest(method: string, params: Record<string, string>) {
 	return async (): Promise<any> => {
-		const stored = localStorage.getItem('write_nwc_connection');
+		const stored = storedConnection();
 		if (!stored) throw new Error('NWC not connected');
 		const parsed = nip47.parseConnectionString(stored);
 		const secretKey = hexToBytes(parsed.secret);
@@ -100,14 +109,32 @@ function makeNwcRequest(method: string, params: Record<string, string>) {
 }
 
 function createNwcStore() {
-	const { subscribe, set, update } = writable<NwcState>(restoreState());
+	const { subscribe, set, update } = writable<NwcState>(empty);
+	let activePubkey: string | null = null;
+	auth.subscribe((signer: Signer | null) => {
+		const pubkey = signer?.pubkey ?? null;
+		if (pubkey === activePubkey) return;
+		activePubkey = pubkey;
+		if (!pubkey) { set(empty); return; }
+		let stored = localStorage.getItem(accountConnectionKey(pubkey));
+		if (!stored) {
+			stored = localStorage.getItem('write_nwc_connection');
+			if (stored) {
+				localStorage.setItem(accountConnectionKey(pubkey), stored);
+				localStorage.removeItem('write_nwc_connection');
+			}
+		}
+		set(restoreState(stored));
+	});
 
 	return {
 		subscribe,
 
 		connect(connectionString: string) {
 			const parsed = nip47.parseConnectionString(connectionString);
-			localStorage.setItem('write_nwc_connection', connectionString);
+			const signer = get(auth);
+			if (signer) localStorage.setItem(accountConnectionKey(signer.pubkey), connectionString);
+			else localStorage.setItem('write_nwc_connection', connectionString);
 			set({
 				connected: true,
 				connectionString,
@@ -115,11 +142,20 @@ function createNwcStore() {
 				relay: parsed.relays[0],
 				balance: null
 			});
+			scheduleEncryptedSettingsSync(signer?.pubkey ?? null);
 		},
 
 		disconnect() {
-			localStorage.removeItem('write_nwc_connection');
+			const signer = get(auth);
+			if (signer) localStorage.removeItem(accountConnectionKey(signer.pubkey));
+			else localStorage.removeItem('write_nwc_connection');
 			set(empty);
+			scheduleEncryptedSettingsSync(signer?.pubkey ?? null);
+		},
+
+		reloadForAccount(pubkey: string) {
+		if (get(auth)?.pubkey !== pubkey) return;
+		set(restoreState(localStorage.getItem(accountConnectionKey(pubkey))));
 		},
 
 		async getBalance(): Promise<number> {
