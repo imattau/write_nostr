@@ -3,6 +3,7 @@
 	import { auth, pubkey } from '$lib/stores/auth';
 	import { profileCache, requestProfiles, displayName } from '$lib/stores/profiles';
 	import { onMount } from 'svelte';
+	let menuOpen = $state(false);
 
 	// Fetch profile whenever pubkey changes
 	$effect(() => {
@@ -16,19 +17,30 @@
 			<img class="logo-mark" src="/brand/pen-logo-compact.png" alt="" aria-hidden="true" />
 			<span class="logo-text">write_nostr</span>
 		</a>
-		<div class="nav-links">
+		{#if $pubkey}
+			<button
+				class="menu-toggle"
+				aria-label={menuOpen ? 'Close navigation menu' : 'Open navigation menu'}
+				aria-expanded={menuOpen}
+				aria-controls="primary-navigation"
+				onclick={() => (menuOpen = !menuOpen)}
+			>
+				<span></span><span></span><span></span>
+			</button>
+		{/if}
+		<div class="nav-links" id="primary-navigation" class:open={menuOpen}>
 			{#if $pubkey}
-				<a href="/new" class="nav-link" class:active={$page.url.pathname === '/new'}>
+				<a href="/new" class="nav-link" class:active={$page.url.pathname === '/new'} onclick={() => (menuOpen = false)}>
 					New Article
 				</a>
-				<a href="/drafts" class="nav-link" class:active={$page.url.pathname === '/drafts'}>
+				<a href="/drafts" class="nav-link" class:active={$page.url.pathname === '/drafts'} onclick={() => (menuOpen = false)}>
 					Drafts
 				</a>
-				<a href="/settings" class="nav-link" class:active={$page.url.pathname === '/settings'}>
+				<a href="/settings" class="nav-link" class:active={$page.url.pathname === '/settings'} onclick={() => (menuOpen = false)}>
 					Settings
 				</a>
 				<span class="pubkey" title={$pubkey}>{displayName($pubkey, $profileCache)}</span>
-				<button onclick={() => auth.logout()}>Logout</button>
+				<button onclick={() => { menuOpen = false; auth.logout(); }}>Logout</button>
 			{/if}
 		</div>
 	</div>
@@ -77,9 +89,10 @@
 		justify-content: flex-end;
 	}
 	.nav-link {
-		font-size: 0.875rem;
+		font-size: 1rem;
 		color: var(--c-text-secondary);
 	}
+	.menu-toggle { display: none; }
 	.nav-link.active {
 		color: var(--c-accent);
 	}
@@ -96,31 +109,58 @@
 	}
 
 	@media (max-width: 640px) {
+		.nav { position: sticky; }
 		.nav-inner {
-			height: auto;
-			padding-top: var(--space-sm);
-			padding-bottom: var(--space-sm);
-			align-items: flex-start;
+			position: relative;
+			height: 56px;
+			padding-top: 0;
+			padding-bottom: 0;
+			align-items: center;
+			flex-direction: row;
+		}
+		.menu-toggle {
+			display: flex;
+			width: 48px;
+			height: 48px;
 			flex-direction: column;
+			align-items: center;
+			justify-content: center;
+			gap: 5px;
+			padding: 10px;
+			border: 1px solid var(--c-border);
+			border-radius: 8px;
+			background: var(--c-surface);
+			color: var(--c-text);
+			cursor: pointer;
 		}
+		.menu-toggle span { display: block; width: 20px; height: 2px; border-radius: 2px; background: currentColor; }
 		.nav-links {
-			width: 100%;
-			justify-content: flex-start;
-			gap: var(--space-xs);
+			display: none;
+			position: absolute;
+			top: calc(100% - 1px);
+			left: 0;
+			right: 0;
+			z-index: 11;
+			width: auto;
+			padding: var(--space-sm);
+			flex-direction: column;
+			align-items: stretch;
+			gap: 4px;
+			background: var(--c-surface);
+			border: 1px solid var(--c-border);
+			border-radius: 0 0 10px 10px;
+			box-shadow: 0 8px 20px rgb(0 0 0 / 12%);
 		}
+		.nav-links.open { display: flex; }
+		.nav-links .nav-link,
+		.nav-links > button { display: flex; align-items: center; min-height: 48px; padding: 10px 12px; font-size: 1.0625rem; }
+		.nav-links .nav-link { border-radius: 6px; }
+		.nav-links .nav-link.active { background: var(--c-bg); }
+		.nav-links > button { justify-content: flex-start; }
+		.pubkey { font-size: 0.9375rem; padding: 8px 12px; }
 		.logo-mark {
-			width: 18px;
-			height: 18px;
-		}
-		.nav-link,
-		.pubkey,
-		.nav-links button {
-			font-size: 0.8125rem;
-		}
-		.pubkey {
-			max-width: none;
-			white-space: normal;
-			word-break: break-word;
+			width: 22px;
+			height: 22px;
 		}
 	}
 </style>
