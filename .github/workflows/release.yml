@@ -62,20 +62,22 @@ jobs:
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           test -n "$ANDROID_KEYSTORE_BASE64"
           test -n "$ANDROID_KEYSTORE_PASSWORD"
-          test -n "$ANDROID_KEY_ALIAS"
           ANDROID_KEY_PASSWORD="${ANDROID_KEY_PASSWORD:-$ANDROID_KEYSTORE_PASSWORD}"
           KEYSTORE_PATH="$RUNNER_TEMP/release.p12"
           printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_PATH"
+          KEY_ALIAS=$(keytool -list -v -keystore "$KEYSTORE_PATH" -storetype PKCS12 \
+            -storepass "$ANDROID_KEYSTORE_PASSWORD" |
+            awk -F': ' '/^Alias name: / { alias = $2 } /^Entry type: PrivateKeyEntry/ { print alias; exit }')
+          test -n "$KEY_ALIAS"
 
           cat > src-tauri/gen/android/keystore.properties <<EOF
           storeFile=$KEYSTORE_PATH
           storePassword=$ANDROID_KEYSTORE_PASSWORD
-          keyAlias=$ANDROID_KEY_ALIAS
+          keyAlias=$KEY_ALIAS
           keyPassword=$ANDROID_KEY_PASSWORD
           EOF
 
