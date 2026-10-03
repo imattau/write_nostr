@@ -62,11 +62,9 @@ jobs:
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           test -n "$ANDROID_KEYSTORE_BASE64"
           test -n "$ANDROID_KEYSTORE_PASSWORD"
-          ANDROID_KEY_PASSWORD="${ANDROID_KEY_PASSWORD:-$ANDROID_KEYSTORE_PASSWORD}"
           KEYSTORE_PATH="$RUNNER_TEMP/release.p12"
           printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_PATH"
           KEY_ALIAS=$(keytool -list -v -keystore "$KEYSTORE_PATH" -storetype PKCS12 \
@@ -78,7 +76,7 @@ jobs:
           storeFile=$KEYSTORE_PATH
           storePassword=$ANDROID_KEYSTORE_PASSWORD
           keyAlias=$KEY_ALIAS
-          keyPassword=$ANDROID_KEY_PASSWORD
+          keyPassword=$ANDROID_KEYSTORE_PASSWORD
           EOF
 
           python3 - <<'PY'

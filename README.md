@@ -79,7 +79,6 @@ Configure these repository secrets for Android release signing:
 - `ANDROID_KEYSTORE_BASE64` — base64-encoded PKCS#12 keystore
 - `ANDROID_KEYSTORE_PASSWORD`
 - The signing key alias is read from the keystore during the build.
-- `ANDROID_KEY_PASSWORD` — defaults to the keystore password if unset
 
 Tagged Android releases are also published to Zapstore using `zapstore.yaml`.
 Configure the repository secret `ZAPSTORE_NSEC` with the Zapstore publisher
