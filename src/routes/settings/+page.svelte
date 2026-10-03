@@ -3,6 +3,7 @@
 	import { auth, pubkey } from '$lib/stores/auth';
 	import { nwc } from '$lib/stores/nwc';
 	import { settingsSyncRevision, settingsSyncStatus, scheduleEncryptedSettingsSync } from '$lib/nostr/settingsSync';
+	import { draftSyncStatus, retryEncryptedDraftSync } from '$lib/nostr/draftSync';
 	import { DEFAULT_BLOSSOM_SERVERS, fetchBlossomServerList, loadBlossomSettings, saveBlossomSettings, type BlossomSettings } from '$lib/nostr/blossom';
 	import { DEFAULT_MODELS, getDefaultAIDraftingSettings, listAvailableModels, loadAIDraftingSettings, PROVIDER_LABELS, saveAIDraftingSettings, type AIProvider, type AIDraftingSettings, type AvailableModel } from '$lib/ai-drafting';
 
@@ -215,6 +216,19 @@
 		{:else}
 			<p class="message">Preparing encrypted settings sync…</p>
 		{/if}
+	</section>
+
+	<section>
+		<h2>Encrypted drafts sync</h2>
+		<p class="desc">Drafts sync automatically between devices in NIP-44 encrypted Nostr events. Draft titles and article text are encrypted; relays can see event timing and approximate draft sizes. Drafts remain saved locally if sync is unavailable.</p>
+		{#if !$pubkey}
+			<p class="message">Log in with a NIP-44 capable signer to sync drafts.</p>
+		{:else if $draftSyncStatus.pubkey === $pubkey}
+			<p class="message">{$draftSyncStatus.message}</p>
+		{:else}
+			<p class="message">Preparing encrypted draft sync…</p>
+		{/if}
+		<button onclick={() => $pubkey && retryEncryptedDraftSync($pubkey)} disabled={!$pubkey || $draftSyncStatus.state === 'syncing'}>Sync drafts now</button>
 	</section>
 
 	<section>

@@ -7,6 +7,8 @@
 	import { relays } from '$lib/stores/relays';
 	import { loadSocialLists } from '$lib/stores/social';
 	import { initializeEncryptedSettingsSync } from '$lib/nostr/settingsSync';
+	import { initializeEncryptedDraftSync } from '$lib/nostr/draftSync';
+	import { activateDraftAccount } from '$lib/stores/drafts';
 	import { nwc } from '$lib/stores/nwc';
 	import { onMount } from 'svelte';
 	import { pruneStaleCache } from '$lib/graph';
@@ -26,10 +28,12 @@
 
 	// When a pubkey becomes available after login, load the user's relay list.
 	$effect(() => {
+		activateDraftAccount($pubkey);
 		if ($pubkey) {
 			const key = $pubkey;
 			relays.loadFromNostr(key).then(async () => {
 				await initializeEncryptedSettingsSync(key);
+				await initializeEncryptedDraftSync(key);
 				nwc.reloadForAccount(key);
 				await loadSocialLists();
 			}).catch((error) => {
