@@ -49,7 +49,7 @@
 <style>
 	.nav {
 		position: sticky;
-		top: 0;
+		top: var(--safe-area-top);
 		z-index: 10;
 		background: var(--c-surface);
 		border-bottom: 1px solid var(--c-border);
@@ -109,7 +109,6 @@
 	}
 
 	@media (max-width: 640px) {
-		.nav { position: sticky; }
 		.nav-inner {
 			position: relative;
 			height: 56px;
@@ -162,5 +161,16 @@
 			width: 22px;
 			height: 22px;
 		}
+	}
+
+	/* Touch-first tablets have room for larger type and taller navigation targets. */
+	@media (min-width: 641px) and (pointer: coarse) {
+		.nav-inner { min-height: 64px; height: auto; padding-top: var(--space-sm); padding-bottom: var(--space-sm); }
+		.nav-links { gap: var(--space-lg); }
+		.nav-link { font-size: 1.125rem; }
+		.nav-links > button { min-height: 48px; font-size: 1rem; }
+		.pubkey { font-size: 0.875rem; padding: 6px 10px; }
+		.logo { font-size: 1.125rem; }
+		.logo-mark { width: 24px; height: 24px; }
 	}
 </style>
