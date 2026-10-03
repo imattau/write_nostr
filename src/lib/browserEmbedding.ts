@@ -7,6 +7,8 @@ import {
 
 export const DEFAULT_BROWSER_EMBEDDING_MODEL = 'onnx-community/all-MiniLM-L6-v2-ONNX';
 
+let enablePromise: Promise<boolean> | null = null;
+
 interface PendingRequest {
 	resolve: (vector: Float64Array) => void;
 	reject: (error: Error) => void;
@@ -54,13 +56,26 @@ function createBrowserEmbeddingProvider(options: BrowserEmbeddingOptions = {}): 
 	};
 }
 
-/** Warm Transformers.js away from the UI path, then rebuild persisted vectors. */
-export async function enableBrowserSemanticEmbeddings(options: BrowserEmbeddingOptions = {}): Promise<boolean> {
+/** Load the optional local model once, on demand, then rebuild persisted vectors. */
+export function enableBrowserSemanticEmbeddings(options: BrowserEmbeddingOptions = {}): Promise<boolean> {
+	if (!enablePromise) enablePromise = initializeBrowserSemanticEmbeddings(options);
+	return enablePromise;
+}
+
+async function initializeBrowserSemanticEmbeddings(options: BrowserEmbeddingOptions): Promise<boolean> {
+	let webGPUAvailable = false;
+	const isAndroid = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent);
+	if (!options.device && !isAndroid && typeof navigator !== 'undefined' && 'gpu' in navigator) {
+		try {
+			const gpu = (navigator as Navigator & { gpu: { requestAdapter(): Promise<unknown | null> } }).gpu;
+			webGPUAvailable = Boolean(await gpu.requestAdapter());
+		} catch {
+			// Use WASM if the API exists but the browser cannot provide an adapter.
+		}
+	}
 	const devices: Array<BrowserEmbeddingOptions['device']> = options.device
 		? [options.device]
-		: typeof navigator !== 'undefined' && 'gpu' in navigator
-			? ['webgpu', 'wasm']
-			: ['wasm'];
+		: webGPUAvailable ? ['webgpu', 'wasm'] : ['wasm'];
 	let lastError: unknown;
 
 	for (const device of devices) {

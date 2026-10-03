@@ -24,6 +24,14 @@
 			// Search the complete persisted Polypack graph, including articles
 			// outside the current hot cache.
 			results = await searchEventsByText(q, 0.15, 20);
+			// Upgrade the lightweight built-in vectors only when the user searches.
+			// On Android this uses WASM and won't probe/initialize WebGPU at launch.
+			import('$lib/browserEmbedding')
+				.then(async ({ enableBrowserSemanticEmbeddings }) => {
+					if (!await enableBrowserSemanticEmbeddings() || query.trim() !== q) return;
+					results = await searchEventsByText(q, 0.15, 20);
+				})
+				.catch((error) => console.warn('[embeddings] enhancement unavailable:', error));
 			// Warm the topic region and re-rank by activation composite
 			absorbSearch(q).then((scores) => {
 				if (!scores.size) return;
