@@ -369,7 +369,7 @@
 	}
 	.message {
 		position: fixed;
-		bottom: var(--space-md);
+		bottom: calc(var(--space-md) + var(--safe-area-bottom));
 		left: 50%;
 		transform: translateX(-50%);
 		background: var(--c-surface);

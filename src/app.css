@@ -20,6 +20,10 @@
 	--space-lg: 24px;
 	--space-xl: 32px;
 	--space-2xl: 48px;
+	--safe-area-top: env(safe-area-inset-top, 0px);
+	--safe-area-right: env(safe-area-inset-right, 0px);
+	--safe-area-bottom: env(safe-area-inset-bottom, 0px);
+	--safe-area-left: env(safe-area-inset-left, 0px);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -49,10 +53,13 @@ html {
 	color: var(--c-text);
 	line-height: 1.6;
 	-webkit-font-smoothing: antialiased;
+	min-height: 100%;
 }
 
 body {
 	min-height: 100vh;
+	min-height: 100dvh;
+	padding: var(--safe-area-top) var(--safe-area-right) var(--safe-area-bottom) var(--safe-area-left);
 }
 
 a {

@@ -52,9 +52,9 @@
 </aside>
 
 <style>
-	.ai-backdrop { position: fixed; z-index: 19; inset: 48px 0 0; background: rgba(0, 0, 0, .28); opacity: 0; visibility: hidden; pointer-events: none; transition: opacity .2s ease, visibility .2s ease; }
+	.ai-backdrop { position: fixed; z-index: 19; inset: calc(48px + var(--safe-area-top)) 0 var(--safe-area-bottom); background: rgba(0, 0, 0, .28); opacity: 0; visibility: hidden; pointer-events: none; transition: opacity .2s ease, visibility .2s ease; }
 	.ai-backdrop.open { opacity: 1; visibility: visible; pointer-events: auto; }
-	.ai-panel { position: fixed; z-index: 20; top: 48px; right: 0; bottom: 0; width: min(360px, 92vw); padding: var(--space-md); background: var(--c-surface); border-left: 1px solid var(--c-border); box-shadow: -8px 0 24px rgba(0,0,0,.12); overflow-y: auto; opacity: 0; visibility: hidden; pointer-events: none; transform: translateX(100%); transition: transform .24s ease, opacity .2s ease, visibility .24s ease; }
+	.ai-panel { position: fixed; z-index: 20; top: calc(48px + var(--safe-area-top)); right: 0; bottom: var(--safe-area-bottom); width: min(360px, 92vw); padding: var(--space-md); background: var(--c-surface); border-left: 1px solid var(--c-border); box-shadow: -8px 0 24px rgba(0,0,0,.12); overflow-y: auto; opacity: 0; visibility: hidden; pointer-events: none; transform: translateX(100%); transition: transform .24s ease, opacity .2s ease, visibility .24s ease; }
 	.ai-panel.open { opacity: 1; visibility: visible; pointer-events: auto; transform: translateX(0); }
 	.panel-header { display: flex; align-items: center; justify-content: space-between; } h2 { font-size: 1rem; }
 	.panel-header button { border: 0; font-size: 1.5rem; padding: 0 6px; } .hint, .privacy, .result-label { color: var(--c-text-secondary); font-size: .8rem; }

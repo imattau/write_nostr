@@ -138,7 +138,8 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		min-height: 100vh;
+		min-height: calc(100vh - var(--safe-area-top) - var(--safe-area-bottom));
+		min-height: calc(100dvh - var(--safe-area-top) - var(--safe-area-bottom));
 		padding: var(--space-md);
 	}
 	.auth-card {

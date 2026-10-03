@@ -443,4 +443,17 @@
 			height: 24px;
 		}
 	}
+
+	@media (pointer: coarse) {
+		.social-btn {
+			width: 44px;
+			height: 44px;
+			border-radius: 8px;
+			touch-action: manipulation;
+		}
+		.social-btn svg {
+			width: 18px;
+			height: 18px;
+		}
+	}
 </style>
